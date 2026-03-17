@@ -21,15 +21,8 @@
       align-items: center;
       gap: 12px;
     }
-    header h1 {
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-    }
-    header .status {
-      font-size: 12px;
-      color: #666;
-    }
+    header h1 { font-size: 18px; font-weight: 600; color: #fff; }
+    header .status { font-size: 12px; color: #666; }
     #messages {
       flex: 1;
       overflow-y: auto;
@@ -42,8 +35,7 @@
       max-width: 80%;
       padding: 12px 16px;
       border-radius: 12px;
-      line-height: 1.5;
-      white-space: pre-wrap;
+      line-height: 1.6;
       word-break: break-word;
       font-size: 14px;
     }
@@ -52,6 +44,7 @@
       background: #1a3a5c;
       color: #d0e8ff;
       border-bottom-right-radius: 4px;
+      white-space: pre-wrap;
     }
     .msg.assistant {
       align-self: flex-start;
@@ -63,6 +56,7 @@
       align-self: flex-start;
       background: #2e1a1a;
       color: #ff9090;
+      white-space: pre-wrap;
     }
     .msg .meta {
       font-size: 11px;
@@ -108,6 +102,77 @@
     }
     #send:hover { background: #245080; }
     #send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ─── Markdown styles ─────────────────────────── */
+    .msg.assistant p { margin: 0.4em 0; }
+    .msg.assistant p:first-child { margin-top: 0; }
+    .msg.assistant p:last-child { margin-bottom: 0; }
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3,
+    .msg.assistant h4, .msg.assistant h5, .msg.assistant h6 {
+      color: #fff;
+      margin: 0.8em 0 0.3em;
+      line-height: 1.3;
+    }
+    .msg.assistant h1 { font-size: 1.3em; }
+    .msg.assistant h2 { font-size: 1.15em; }
+    .msg.assistant h3 { font-size: 1.05em; }
+    .msg.assistant code {
+      background: #111;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9em;
+      color: #c9d1d9;
+    }
+    .msg.assistant pre {
+      background: #0d1117;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 0.5em 0;
+      overflow-x: auto;
+      line-height: 1.4;
+    }
+    .msg.assistant pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: 0.85em;
+      color: #c9d1d9;
+    }
+    .msg.assistant ul, .msg.assistant ol {
+      margin: 0.4em 0;
+      padding-left: 1.5em;
+    }
+    .msg.assistant li { margin: 0.2em 0; }
+    .msg.assistant blockquote {
+      border-left: 3px solid #444;
+      padding-left: 12px;
+      color: #999;
+      margin: 0.4em 0;
+    }
+    .msg.assistant a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .msg.assistant a:hover { text-decoration: underline; }
+    .msg.assistant hr {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 0.8em 0;
+    }
+    .msg.assistant strong { color: #fff; }
+    .msg.assistant table {
+      border-collapse: collapse;
+      margin: 0.5em 0;
+      font-size: 0.9em;
+    }
+    .msg.assistant th, .msg.assistant td {
+      border: 1px solid #333;
+      padding: 4px 10px;
+      text-align: left;
+    }
+    .msg.assistant th { background: #1a1a2e; color: #fff; }
   </style>
 </head>
 <body>
@@ -125,13 +190,181 @@
     const messages = document.getElementById('messages');
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
-    const status = document.getElementById('status');
+    const statusEl = document.getElementById('status');
+
+    // ─── Minimal markdown renderer (XSS-safe) ───
+
+    function esc(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderInline(text) {
+      let s = esc(text);
+      // Bold: **text** or __text__
+      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      // Italic: *text* or _text_ (but not inside words for _)
+      s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      s = s.replace(/(^|[\s(])_(.+?)_([\s).,;:!?]|$)/g, '$1<em>$2</em>$3');
+      // Strikethrough: ~~text~~
+      s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+      // Inline code: `code`
+      s = s.replace(/`([^`]+?)`/g, '<code>$1</code>');
+      // Links: [text](url)
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+        // Only allow http/https URLs
+        if (/^https?:\/\//i.test(url)) {
+          return `<a href="${url}" target="_blank" rel="noopener">${text}</a>`;
+        }
+        return `[${text}](${url})`;
+      });
+      return s;
+    }
+
+    function renderMarkdown(text) {
+      const lines = text.split('\n');
+      const out = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Fenced code block: ```lang
+        if (line.startsWith('```')) {
+          const lang = esc(line.slice(3).trim());
+          const codeLines = [];
+          i++;
+          while (i < lines.length && !lines[i].startsWith('```')) {
+            codeLines.push(esc(lines[i]));
+            i++;
+          }
+          i++; // skip closing ```
+          const langAttr = lang ? ` data-lang="${lang}"` : '';
+          out.push(`<pre${langAttr}><code>${codeLines.join('\n')}</code></pre>`);
+          continue;
+        }
+
+        // Headings: # ## ### etc
+        const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          out.push(`<h${level}>${renderInline(headingMatch[2])}</h${level}>`);
+          i++;
+          continue;
+        }
+
+        // Horizontal rule: --- or *** or ___
+        if (/^(\s*[-*_]\s*){3,}$/.test(line)) {
+          out.push('<hr>');
+          i++;
+          continue;
+        }
+
+        // Blockquote: > text
+        if (line.startsWith('> ') || line === '>') {
+          const bqLines = [];
+          while (i < lines.length && (lines[i].startsWith('> ') || lines[i] === '>')) {
+            bqLines.push(lines[i].replace(/^>\s?/, ''));
+            i++;
+          }
+          out.push(`<blockquote>${renderMarkdown(bqLines.join('\n'))}</blockquote>`);
+          continue;
+        }
+
+        // Unordered list: - item or * item
+        if (/^\s*[-*+]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*[-*+]\s+/, ''));
+            i++;
+          }
+          out.push('<ul>' + items.map(li => `<li>${renderInline(li)}</li>`).join('') + '</ul>');
+          continue;
+        }
+
+        // Ordered list: 1. item
+        if (/^\s*\d+[.)]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*\d+[.)]\s+/, ''));
+            i++;
+          }
+          out.push('<ol>' + items.map(li => `<li>${renderInline(li)}</li>`).join('') + '</ol>');
+          continue;
+        }
+
+        // Table: | ... | ... |
+        if (line.includes('|') && line.trim().startsWith('|')) {
+          const tableRows = [];
+          while (i < lines.length && lines[i].includes('|') && lines[i].trim().startsWith('|')) {
+            tableRows.push(lines[i]);
+            i++;
+          }
+          if (tableRows.length >= 2) {
+            // Check if row 2 is a separator (|---|---|)
+            const isSep = /^\|[\s:-]+\|/.test(tableRows[1]);
+            const headerRow = tableRows[0];
+            const dataRows = isSep ? tableRows.slice(2) : tableRows.slice(1);
+
+            const parseCells = (row) => row.split('|').slice(1, -1).map(c => c.trim());
+
+            let html = '<table>';
+            if (isSep) {
+              html += '<thead><tr>' + parseCells(headerRow).map(c => `<th>${renderInline(c)}</th>`).join('') + '</tr></thead>';
+            }
+            html += '<tbody>';
+            const rows = isSep ? dataRows : tableRows;
+            for (const row of rows) {
+              html += '<tr>' + parseCells(row).map(c => `<td>${renderInline(c)}</td>`).join('') + '</tr>';
+            }
+            html += '</tbody></table>';
+            out.push(html);
+            continue;
+          }
+        }
+
+        // Empty line
+        if (line.trim() === '') {
+          i++;
+          continue;
+        }
+
+        // Paragraph: collect consecutive non-empty lines
+        const paraLines = [];
+        while (i < lines.length && lines[i].trim() !== '' &&
+               !lines[i].startsWith('```') && !lines[i].startsWith('#') &&
+               !lines[i].startsWith('> ') && !/^\s*[-*+]\s+/.test(lines[i]) &&
+               !/^\s*\d+[.)]\s+/.test(lines[i]) && !/^(\s*[-*_]\s*){3,}$/.test(lines[i]) &&
+               !(lines[i].includes('|') && lines[i].trim().startsWith('|'))) {
+          paraLines.push(lines[i]);
+          i++;
+        }
+        if (paraLines.length > 0) {
+          out.push(`<p>${renderInline(paraLines.join('\n'))}</p>`);
+        }
+      }
+
+      return out.join('\n');
+    }
+
+    // ─── Message handling ────────────────────────
 
     function addMessage(text, role, meta) {
       const div = document.createElement('div');
       div.className = `msg ${role}`;
-      // Use textContent to prevent XSS
-      div.textContent = text;
+
+      if (role === 'assistant') {
+        // Render markdown for assistant messages
+        div.innerHTML = renderMarkdown(text);
+      } else {
+        // Plain text for user/error messages (XSS-safe)
+        div.textContent = text;
+      }
+
       if (meta) {
         const metaEl = document.createElement('div');
         metaEl.className = 'meta';
@@ -164,7 +397,7 @@
       input.value = '';
       input.style.height = 'auto';
       sendBtn.disabled = true;
-      status.textContent = 'thinking...';
+      statusEl.textContent = 'thinking...';
       addThinking();
 
       try {
@@ -192,7 +425,7 @@
         addMessage(`Network error: ${err.message}`, 'error');
       } finally {
         sendBtn.disabled = false;
-        status.textContent = 'ready';
+        statusEl.textContent = 'ready';
         input.focus();
       }
     }
