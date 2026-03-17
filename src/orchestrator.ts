@@ -10,6 +10,7 @@ import type { MessageInput, MessageOutput, AgentConfig } from "./types.js";
 import { ValidationError } from "./types.js";
 
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+let msgSeq = 0;
 
 function validateId(value: string, fieldName: string): string {
   if (!ID_PATTERN.test(value)) {
@@ -76,10 +77,16 @@ export class Orchestrator {
   }
 
   private async _handleMessage(input: MessageInput): Promise<MessageOutput> {
+    const mid = ++msgSeq;
     const startTime = Date.now();
     const agentId = input.agentId ?? this.config.defaultAgent;
     const agent = this.agents.get(agentId);
     const security = getSecurityProfile(input.channelId, this.config);
+
+    const msgPreview = input.message.slice(0, 100).replace(/\n/g, "\\n");
+    console.log(`[msg:${mid}] ── incoming ──────────────────────────────`);
+    console.log(`[msg:${mid}] channel=${input.channelId} user=${input.userId} agent=${agentId} ephemeral=${!!input.ephemeral}`);
+    console.log(`[msg:${mid}] message: ${msgPreview}${input.message.length > 100 ? `... (${input.message.length} chars)` : ""}`);
 
     // Validate IDs to prevent path traversal
     if (input.agentId) validateId(input.agentId, "agentId");
@@ -87,6 +94,7 @@ export class Orchestrator {
 
     // Validate message length
     if (input.message.length > security.maxMessageLength) {
+      console.warn(`[msg:${mid}] ✗ rejected: message too long (${input.message.length} > ${security.maxMessageLength})`);
       throw new ValidationError(`Message exceeds maximum length of ${security.maxMessageLength} characters`, "MESSAGE_TOO_LONG");
     }
 
@@ -94,10 +102,11 @@ export class Orchestrator {
     let session;
     if (!input.ephemeral) {
       session = this.sessions.getOrCreate(input.channelId, input.userId, agentId);
+      console.log(`[msg:${mid}] session=${session.id} claude_session=${session.claudeSessionId || "new"} turns=${session.turnCount}`);
 
       // Check if session needs rotation
       if (this.sessions.needsRotation(session)) {
-        console.log(`[orchestrator] Rotating session ${session.id} (${session.turnCount} turns)`);
+        console.log(`[msg:${mid}] rotating session (${session.turnCount} turns)`);
         this.sessions.rotate(session);
       }
     }
@@ -112,6 +121,8 @@ export class Orchestrator {
       .filter(Boolean)
       .join("\n\n---\n\n");
 
+    console.log(`[msg:${mid}] prompt: soul=${soulPrompt.length}b memory=${memoryContext.length}b skills=${skillsSection.length}b total=${fullPrompt.length}b mode=${this.config.promptMode}`);
+
     // Determine tools
     const allowedTools = [
       ...(security.allowedTools.length > 0 ? security.allowedTools : []),
@@ -119,8 +130,15 @@ export class Orchestrator {
       ...this.skills.getAllAllowedTools(),
     ];
 
+    if (allowedTools.length > 0) {
+      console.log(`[msg:${mid}] allowed-tools: [${[...new Set(allowedTools)].join(", ")}]`);
+    }
+
     // Acquire process pool slot
+    console.log(`[msg:${mid}] acquiring pool slot...`);
     await this.pool.acquire();
+    console.log(`[msg:${mid}] pool slot acquired, dispatching to claude`);
+
     try {
       const result = await this.runner.run({
         message: input.message,
@@ -137,11 +155,11 @@ export class Orchestrator {
 
       // Handle runner failure
       if (!result.ok) {
+        console.warn(`[msg:${mid}] ✗ runner failed: ${result.error}`);
         // If resume failed, try without resume (session may have expired)
         if (session?.claudeSessionId && result.error?.includes("session")) {
-          console.warn(`[orchestrator] Session expired, starting fresh: ${result.error}`);
+          console.warn(`[msg:${mid}] session expired, rotating`);
           this.sessions.rotate(session);
-          // Don't retry automatically — inform the user
           return {
             result: "Your session has expired. Starting a new conversation. Please send your message again.",
             sessionId: session.id,
@@ -157,6 +175,9 @@ export class Orchestrator {
         };
       }
 
+      const totalMs = Date.now() - startTime;
+      console.log(`[msg:${mid}] ✓ ok cost=$${result.cost?.toFixed(4) ?? "?"} total=${totalMs}ms`);
+
       // Update session
       if (session && !input.ephemeral) {
         this.sessions.update(session.id, {
@@ -165,26 +186,30 @@ export class Orchestrator {
           turnCount: session.turnCount + 1,
         });
         this.sessions.flush();
+        console.log(`[msg:${mid}] session updated: claude_session=${result.sessionId || session.claudeSessionId} turns=${session.turnCount + 1}`);
       }
 
       // Journal (non-ephemeral interactions)
       if (!input.ephemeral) {
         this.memory.appendJournal({ role: "user", content: input.message });
         this.memory.appendJournal({ role: "assistant", content: result.result });
+        console.log(`[msg:${mid}] journal written`);
       }
 
       // Self-learning (fire-and-forget, only if enabled for this channel)
       if (this.config.learning.afterEveryTurn && security.learningEnabled && !input.ephemeral) {
+        console.log(`[msg:${mid}] triggering self-learning reflection`);
         this.learner.reflect(input.message, result.result).catch((err) => {
-          console.warn(`[orchestrator] Learning reflection failed: ${err}`);
+          console.warn(`[msg:${mid}] learning reflection failed: ${err}`);
         });
       }
 
+      console.log(`[msg:${mid}] ── done ──────────────────────────────────`);
       return {
         result: result.result,
         sessionId: session?.id ?? `ephemeral:${Date.now()}`,
         cost: result.cost,
-        durationMs: Date.now() - startTime,
+        durationMs: totalMs,
       };
     } finally {
       this.pool.release();
