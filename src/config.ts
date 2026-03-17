@@ -154,6 +154,7 @@ export function resolvePath(configRelative: string): string {
 export function getSecurityProfile(channelName: string, config: MikeClawConfig): ChannelSecurityProfile {
   const defaults: Record<string, ChannelSecurityProfile> = {
     cli: {
+      // CLI: local user, full trust — no tool restrictions
       allowedTools: [],
       permissionMode: config.permissionMode,
       maxMessageLength: 200_000,
@@ -163,8 +164,10 @@ export function getSecurityProfile(channelName: string, config: MikeClawConfig):
       agentWriteToMemoryEnabled: true,
     },
     web: {
+      // Web: allowlist is the security gate (read-only tools only)
+      // Permission mode must be permissive so whitelisted tools can execute in -p mode
       allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
-      permissionMode: "plan",
+      permissionMode: "bypassPermissions",
       maxMessageLength: 50_000,
       maxTimeoutMs: 120_000,
       requireAuth: config.channels.web.auth.type !== "none",
@@ -172,8 +175,9 @@ export function getSecurityProfile(channelName: string, config: MikeClawConfig):
       agentWriteToMemoryEnabled: false,
     },
     cron: {
+      // Cron: system-generated messages, full trust
       allowedTools: [],
-      permissionMode: config.permissionMode,
+      permissionMode: "bypassPermissions",
       maxMessageLength: 200_000,
       maxTimeoutMs: 600_000,
       requireAuth: false,
