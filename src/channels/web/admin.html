@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mikeclaw — Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #1a1a24;
+      --border: #2a2a3a;
+      --text: #e0e0e8;
+      --text2: #8888a0;
+      --accent: #5588cc;
+      --accent2: #3a6aaa;
+      --green: #44bb77;
+      --yellow: #ccaa44;
+      --red: #cc5555;
+      --purple: #8866cc;
+    }
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ─── Layout ─── */
+    .header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 100;
+    }
+    .header h1 { font-size: 16px; color: #fff; font-weight: 600; }
+    .header .meta { color: var(--text2); font-size: 12px; }
+    .header a { color: var(--accent); text-decoration: none; font-size: 12px; }
+    .header a:hover { text-decoration: underline; }
+
+    .nav {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      overflow-x: auto;
+    }
+    .nav button {
+      padding: 10px 20px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text2);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .nav button:hover { color: var(--text); background: var(--surface2); }
+    .nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ─── Cards ─── */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .card .value { font-size: 28px; font-weight: 700; color: #fff; }
+    .card .sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+    /* ─── Tables ─── */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: var(--surface2); }
+
+    /* ─── Badges ─── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-green { background: rgba(68, 187, 119, 0.15); color: var(--green); }
+    .badge-yellow { background: rgba(204, 170, 68, 0.15); color: var(--yellow); }
+    .badge-red { background: rgba(204, 85, 85, 0.15); color: var(--red); }
+    .badge-purple { background: rgba(136, 102, 204, 0.15); color: var(--purple); }
+    .badge-blue { background: rgba(85, 136, 204, 0.15); color: var(--accent); }
+
+    /* ─── Content blocks ─── */
+    .block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .block-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface2);
+    }
+    .block-header h3 { font-size: 13px; font-weight: 600; }
+    .block-body { padding: 16px; }
+    .block-body pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    /* ─── Journal entries ─── */
+    .journal-entry {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+    }
+    .journal-entry:last-child { border-bottom: none; }
+    .journal-entry .time { color: var(--text2); min-width: 60px; font-size: 12px; }
+    .journal-entry .role { font-weight: 600; min-width: 80px; }
+    .journal-entry .role.user { color: var(--accent); }
+    .journal-entry .role.assistant { color: var(--green); }
+    .journal-entry .role.cron { color: var(--yellow); }
+    .journal-entry .msg { color: var(--text); flex: 1; }
+
+    /* ─── Tabs ─── */
+    .date-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .date-pill {
+      padding: 4px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text2);
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .date-pill:hover { border-color: var(--accent); color: var(--text); }
+    .date-pill.active { background: var(--accent2); border-color: var(--accent); color: #fff; }
+
+    /* ─── Soul file viewer ─── */
+    .soul-file { margin-bottom: 12px; }
+    .soul-file .filename { font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+    .soul-file .missing { color: var(--text2); font-style: italic; }
+
+    /* ─── Config tree ─── */
+    .config-tree { font-size: 12px; }
+    .config-tree .key { color: var(--accent); }
+    .config-tree .val { color: var(--green); }
+    .config-tree .val-str { color: var(--yellow); }
+    .config-tree .val-null { color: var(--text2); }
+
+    /* ─── Refresh ─── */
+    .refresh-btn {
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      color: var(--text2);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ─── Loading ─── */
+    .loading { color: var(--text2); padding: 24px; text-align: center; }
+
+    /* ─── Skills ─── */
+    .skill-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .skill-card h4 { color: #fff; margin-bottom: 4px; }
+    .skill-card .desc { color: var(--text2); margin-bottom: 8px; }
+    .skill-tools { display: flex; gap: 4px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:16px">
+      <h1>mikeclaw admin</h1>
+      <span class="meta" id="uptime"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <button class="refresh-btn" onclick="refreshAll()">Refresh</button>
+      <a href="/">Chat UI</a>
+    </div>
+  </div>
+
+  <div class="nav" id="nav">
+    <button class="active" data-panel="overview">Overview</button>
+    <button data-panel="sessions">Sessions</button>
+    <button data-panel="journals">Journals</button>
+    <button data-panel="learnings">Learnings</button>
+    <button data-panel="memory">Memory</button>
+    <button data-panel="soul">Soul</button>
+    <button data-panel="skills">Skills</button>
+    <button data-panel="cron">Cron Jobs</button>
+    <button data-panel="agents">Agents</button>
+    <button data-panel="config">Config</button>
+  </div>
+
+  <div class="content">
+    <!-- Overview -->
+    <div class="panel active" id="panel-overview">
+      <div class="grid" id="overview-cards"></div>
+      <div class="block">
+        <div class="block-header"><h3>Session Activity by Channel</h3></div>
+        <div class="block-body" id="overview-channels"></div>
+      </div>
+    </div>
+
+    <!-- Sessions -->
+    <div class="panel" id="panel-sessions">
+      <div class="block">
+        <div class="block-header"><h3>Active Sessions</h3><span class="meta" id="session-count"></span></div>
+        <div class="block-body"><table><thead><tr>
+          <th>Session ID</th><th>Channel</th><th>User</th><th>Agent</th><th>Turns</th><th>Last Active</th><th>Claude Session</th>
+        </tr></thead><tbody id="sessions-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- Journals -->
+    <div class="panel" id="panel-journals">
+      <div class="date-pills" id="journal-dates"></div>
+      <div class="block">
+        <div class="block-header"><h3>Journal</h3><span class="meta" id="journal-date"></span></div>
+        <div class="block-body" id="journal-entries"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Learnings -->
+    <div class="panel" id="panel-learnings">
+      <div class="grid">
+        <div class="card"><div class="label">Entries</div><div class="value" id="learning-count">-</div><div class="sub" id="learning-cap"></div></div>
+      </div>
+      <div class="block">
+        <div class="block-header"><h3>Extracted Learnings</h3></div>
+        <div class="block-body" id="learnings-list"></div>
+      </div>
+    </div>
+
+    <!-- Memory -->
+    <div class="panel" id="panel-memory">
+      <div class="block">
+        <div class="block-header"><h3>MEMORY.md — Long-Term Memory</h3></div>
+        <div class="block-body"><pre id="memory-content">Loading...</pre></div>
+      </div>
+    </div>
+
+    <!-- Soul -->
+    <div class="panel" id="panel-soul">
+      <div id="soul-files"></div>
+      <div class="block">
+        <div class="block-header"><h3>Assembled System Prompt</h3></div>
+        <div class="block-body"><pre id="soul-assembled">Loading...</pre></div>
+      </div>
+    </div>
+
+    <!-- Skills -->
+    <div class="panel" id="panel-skills">
+      <div class="grid">
+        <div class="card"><div class="label">Loaded Skills</div><div class="value" id="skill-count">-</div></div>
+      </div>
+      <div id="skills-list"></div>
+    </div>
+
+    <!-- Cron -->
+    <div class="panel" id="panel-cron">
+      <div class="block">
+        <div class="block-header"><h3>Scheduled Jobs</h3><span class="meta" id="cron-meta"></span></div>
+        <div class="block-body"><table><thead><tr>
+          <th>ID</th><th>Schedule</th><th>Agent</th><th>Status</th><th>Output</th><th>Message</th>
+        </tr></thead><tbody id="cron-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="panel" id="panel-agents">
+      <div id="agents-list"></div>
+    </div>
+
+    <!-- Config -->
+    <div class="panel" id="panel-config">
+      <div class="block">
+        <div class="block-header"><h3>mikeclaw.json</h3></div>
+        <div class="block-body"><pre id="config-content" class="config-tree">Loading...</pre></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/api/admin';
+    let currentPanel = 'overview';
+
+    // ─── Navigation ───
+    document.querySelectorAll('.nav button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const panel = btn.dataset.panel;
+        document.getElementById('panel-' + panel).classList.add('active');
+        currentPanel = panel;
+        loadPanel(panel);
+      });
+    });
+
+    async function fetchJSON(path) {
+      const res = await fetch(API + '/' + path);
+      return res.json();
+    }
+
+    function ago(isoStr) {
+      const ms = Date.now() - new Date(isoStr).getTime();
+      if (ms < 60000) return Math.floor(ms / 1000) + 's ago';
+      if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
+      if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
+      return Math.floor(ms / 86400000) + 'd ago';
+    }
+
+    function formatUptime(secs) {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      if (h > 0) return `${h}h ${m}m uptime`;
+      if (m > 0) return `${m}m ${s}s uptime`;
+      return `${s}s uptime`;
+    }
+
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ─── Panel Loaders ───
+
+    async function loadOverview() {
+      const data = await fetchJSON('overview');
+      document.getElementById('uptime').textContent = formatUptime(data.uptime);
+
+      const cards = document.getElementById('overview-cards');
+      cards.innerHTML = `
+        <div class="card"><div class="label">Sessions</div><div class="value">${data.sessions.total}</div><div class="sub">${data.sessions.activeLast24h} active (24h)</div></div>
+        <div class="card"><div class="label">Total Turns</div><div class="value">${data.sessions.totalTurns}</div></div>
+        <div class="card"><div class="label">Learnings</div><div class="value">${data.memory.learningCount}</div></div>
+        <div class="card"><div class="label">Journal Days</div><div class="value">${data.memory.journalDates}</div></div>
+        <div class="card"><div class="label">Skills</div><div class="value">${data.skills.loaded}</div></div>
+        <div class="card"><div class="label">Cron Jobs</div><div class="value">${data.cron.enabledJobs}/${data.cron.jobs}</div><div class="sub">enabled/total</div></div>
+        <div class="card"><div class="label">Agents</div><div class="value">${data.agents}</div></div>
+      `;
+
+      const channels = document.getElementById('overview-channels');
+      const breakdown = data.sessions.channelBreakdown;
+      if (Object.keys(breakdown).length === 0) {
+        channels.innerHTML = '<div style="color:var(--text2)">No sessions yet</div>';
+      } else {
+        channels.innerHTML = Object.entries(breakdown)
+          .map(([ch, count]) => `<span class="badge badge-blue" style="margin-right:8px">${escHtml(String(ch))}: ${count}</span>`)
+          .join('');
+      }
+    }
+
+    async function loadSessions() {
+      const data = await fetchJSON('sessions');
+      document.getElementById('session-count').textContent = `${data.count} sessions`;
+      const tbody = document.getElementById('sessions-tbody');
+      if (data.sessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text2)">No sessions</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.sessions.map(s => `<tr>
+        <td style="font-size:11px">${escHtml(s.id)}</td>
+        <td><span class="badge badge-blue">${escHtml(s.channelId)}</span></td>
+        <td>${escHtml(s.userId)}</td>
+        <td>${escHtml(s.agentId)}</td>
+        <td>${s.turnCount}</td>
+        <td title="${s.lastActiveAt}">${ago(s.lastActiveAt)}</td>
+        <td style="font-size:11px;color:var(--text2)">${s.claudeSessionId ?? '—'}</td>
+      </tr>`).join('');
+    }
+
+    let currentJournalDate = null;
+    async function loadJournals(date) {
+      const url = date ? `journals?date=${date}` : 'journals';
+      const data = await fetchJSON(url);
+
+      // Date pills
+      const dates = data.dates ?? [data.date];
+      if (data.dates) {
+        const pills = document.getElementById('journal-dates');
+        pills.innerHTML = data.dates.map(d =>
+          `<button class="date-pill ${d === (date ?? data.latest) ? 'active' : ''}" onclick="loadJournals('${d}')">${d}</button>`
+        ).join('');
+      }
+
+      document.getElementById('journal-date').textContent = date ?? data.latest ?? '';
+      currentJournalDate = date ?? data.latest;
+
+      const entries = data.entries ?? [];
+      const container = document.getElementById('journal-entries');
+      if (entries.length === 0) {
+        container.innerHTML = '<div style="color:var(--text2)">No entries for this date</div>';
+        return;
+      }
+
+      container.innerHTML = entries.map(e => {
+        const roleClass = e.role.includes('user') ? 'user' : e.role.includes('cron') ? 'cron' : 'assistant';
+        return `<div class="journal-entry">
+          <span class="time">${escHtml(e.time)}</span>
+          <span class="role ${roleClass}">${escHtml(e.role)}</span>
+          <span class="msg">${escHtml(e.content)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function loadLearnings() {
+      const data = await fetchJSON('learnings');
+      document.getElementById('learning-count').textContent = data.count;
+      document.getElementById('learning-cap').textContent = `max ${data.maxEntries}`;
+
+      const list = document.getElementById('learnings-list');
+      if (data.entries.length === 0) {
+        list.innerHTML = '<div style="color:var(--text2)">No learnings extracted yet</div>';
+        return;
+      }
+
+      list.innerHTML = data.entries.map(e => {
+        let badge = 'badge-blue';
+        if (e.includes('[Preference]')) badge = 'badge-purple';
+        else if (e.includes('[Pattern]')) badge = 'badge-green';
+        else if (e.includes('[Mistake]')) badge = 'badge-red';
+
+        const tag = e.match(/\[(.*?)\]/)?.[1] ?? 'note';
+        const text = e.replace(/\[.*?\]\s*/, '');
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+          <span class="badge ${badge}">${tag}</span>
+          <span style="margin-left:8px">${escHtml(text)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function loadMemory() {
+      const data = await fetchJSON('memory');
+      document.getElementById('memory-content').textContent = data.longTermMemory || '(empty)';
+    }
+
+    async function loadSoul() {
+      const data = await fetchJSON('soul');
+      const container = document.getElementById('soul-files');
+      container.innerHTML = data.files.map(f => `
+        <div class="block">
+          <div class="block-header"><h3>${escHtml(f.name)}</h3>${f.content === null ? '<span class="badge badge-yellow">missing</span>' : `<span class="meta">${f.content.length} chars</span>`}</div>
+          <div class="block-body"><pre>${f.content !== null ? escHtml(f.content) : '<span style="color:var(--text2)">File not found</span>'}</pre></div>
+        </div>
+      `).join('');
+
+      document.getElementById('soul-assembled').textContent = data.assembledPrompt;
+    }
+
+    async function loadSkills() {
+      const data = await fetchJSON('skills');
+      document.getElementById('skill-count').textContent = data.count;
+
+      const list = document.getElementById('skills-list');
+      if (data.skills.length === 0) {
+        list.innerHTML = '<div class="block"><div class="block-body" style="color:var(--text2)">No skills loaded. Add SKILL.md files to the skills/ directory.</div></div>';
+        return;
+      }
+
+      list.innerHTML = data.skills.map(s => `
+        <div class="skill-card">
+          <h4>${escHtml(s.name)}</h4>
+          <div class="desc">${escHtml(s.description)}</div>
+          <div class="skill-tools">
+            ${s.allowedTools.map(t => `<span class="badge badge-blue">${escHtml(t)}</span>`).join('')}
+          </div>
+          ${s.requires ? `<div style="margin-top:8px;font-size:11px;color:var(--text2)">Requires: ${escHtml(JSON.stringify(s.requires))}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function loadCron() {
+      const data = await fetchJSON('cron');
+      document.getElementById('cron-meta').textContent = `${data.count} jobs | tz: ${data.timezone}`;
+
+      const tbody = document.getElementById('cron-tbody');
+      if (data.jobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">No cron jobs configured</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.jobs.map(j => `<tr>
+        <td style="font-weight:600">${escHtml(j.id)}</td>
+        <td><code>${escHtml(j.schedule)}</code></td>
+        <td>${escHtml(j.agent)}</td>
+        <td>${j.enabled ? '<span class="badge badge-green">enabled</span>' : '<span class="badge badge-yellow">disabled</span>'}</td>
+        <td><span class="badge badge-blue">${j.outputMode}</span></td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(j.message)}</td>
+      </tr>`).join('');
+    }
+
+    async function loadAgents() {
+      const data = await fetchJSON('agents');
+      const list = document.getElementById('agents-list');
+
+      list.innerHTML = data.agents.map(a => `
+        <div class="skill-card">
+          <h4>${escHtml(a.id)}</h4>
+          <div class="desc">${escHtml(a.description)}</div>
+          <div style="font-size:12px;margin-top:8px">
+            <div><span style="color:var(--text2)">Soul:</span> ${escHtml(a.soulDir)}</div>
+            ${a.model ? `<div><span style="color:var(--text2)">Model:</span> ${escHtml(a.model)}</div>` : ''}
+            ${a.skills?.length ? `<div><span style="color:var(--text2)">Skills:</span> ${a.skills.map(s => `<span class="badge badge-purple">${escHtml(s)}</span>`).join(' ')}</div>` : ''}
+            ${a.allowedTools?.length ? `<div style="margin-top:4px">${a.allowedTools.map(t => `<span class="badge badge-blue">${escHtml(t)}</span>`).join(' ')}</div>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadConfig() {
+      const data = await fetchJSON('config');
+      const container = document.getElementById('config-content');
+      container.innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+    }
+
+    function syntaxHighlight(json) {
+      // First escape all HTML entities in the JSON string
+      const escaped = escHtml(json);
+      return escaped.replace(/(&quot;(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\&])*&quot;(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+        let cls = 'val';
+        if (/^&quot;/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'key';
+            match = match.replace(/&quot;/g, '');
+          } else {
+            cls = 'val-str';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'val';
+        } else if (/null/.test(match)) {
+          cls = 'val-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+      });
+    }
+
+    // ─── Panel Router ───
+    const loaders = {
+      overview: loadOverview,
+      sessions: loadSessions,
+      journals: loadJournals,
+      learnings: loadLearnings,
+      memory: loadMemory,
+      soul: loadSoul,
+      skills: loadSkills,
+      cron: loadCron,
+      agents: loadAgents,
+      config: loadConfig,
+    };
+
+    async function loadPanel(name) {
+      try {
+        await loaders[name]?.();
+      } catch (err) {
+        console.error('Failed to load panel:', name, err);
+      }
+    }
+
+    function refreshAll() {
+      loadPanel(currentPanel);
+    }
+
+    // Auto-refresh overview every 30s
+    setInterval(() => {
+      if (currentPanel === 'overview') loadOverview();
+    }, 30000);
+
+    // Initial load
+    loadOverview();
+  </script>
+</body>
+</html>
