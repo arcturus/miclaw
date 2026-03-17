@@ -1,6 +1,7 @@
 node_modules/
 dist/
 sessions/
+skills/
 memory/journals/
 memory/learnings.md
 *.tmp
