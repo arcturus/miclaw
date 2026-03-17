@@ -22,16 +22,12 @@ export class SkillLoader {
       return this.skills;
     }
 
+    // Structure: skills/<skill-name>/SKILL.md
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const skillPath = path.join(dir, entry.name, "SKILL.md");
-        if (existsSync(skillPath)) {
-          const skill = this.parseSkill(skillPath);
-          if (skill) this.skills.push(skill);
-        }
-      } else if (entry.name === "SKILL.md" || entry.name.endsWith(".skill.md")) {
-        const skillPath = path.join(dir, entry.name);
+      if (!entry.isDirectory()) continue;
+      const skillPath = path.join(dir, entry.name, "SKILL.md");
+      if (existsSync(skillPath)) {
         const skill = this.parseSkill(skillPath);
         if (skill) this.skills.push(skill);
       }
