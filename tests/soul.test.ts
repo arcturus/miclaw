@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { SoulLoader } from "./soul.js";
+import { SoulLoader } from "../src/soul.js";
 
 // Mock resolvePath to use our temp dir directly
-vi.mock("./config.js", () => ({
+vi.mock("../src/config.js", () => ({
   resolvePath: (p: string) => p,
 }));
 

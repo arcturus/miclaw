@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ProcessPool, parseStreamOutput } from "./runner.js";
+import { ProcessPool, parseStreamOutput } from "../src/runner.js";
 
 describe("ProcessPool", () => {
   it("allows acquire up to maxConcurrent", async () => {

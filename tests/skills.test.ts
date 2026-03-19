@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { SkillLoader } from "./skills.js";
+import { SkillLoader } from "../src/skills.js";
 
-vi.mock("./config.js", () => ({
+vi.mock("../src/config.js", () => ({
   resolvePath: (p: string) => p,
 }));
 

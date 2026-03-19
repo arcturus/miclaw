@@ -17,7 +17,7 @@ describe("config", () => {
   });
 
   it("loadConfig uses defaults when no file exists", async () => {
-    const { loadConfig } = await import("./config.js");
+    const { loadConfig } = await import("../src/config.js");
     const config = loadConfig(path.join(tempDir, "nonexistent.json"));
     expect(config.defaultAgent).toBe("assistant");
     expect(config.defaultModel).toBe("sonnet");
@@ -33,7 +33,7 @@ describe("config", () => {
       journalDays: 7,
       channels: { web: { port: 9999 } },
     }));
-    const { loadConfig } = await import("./config.js");
+    const { loadConfig } = await import("../src/config.js");
     const config = loadConfig(configPath);
     expect(config.defaultModel).toBe("opus");
     expect(config.journalDays).toBe(7);
@@ -45,12 +45,12 @@ describe("config", () => {
   it("loadConfig throws ConfigError on invalid JSON", async () => {
     const configPath = path.join(tempDir, "mikeclaw.json");
     writeFileSync(configPath, "not json {{{");
-    const { loadConfig } = await import("./config.js");
+    const { loadConfig } = await import("../src/config.js");
     expect(() => loadConfig(configPath)).toThrow();
   });
 
   it("getSecurityProfile returns correct defaults per channel", async () => {
-    const { loadConfig, getSecurityProfile } = await import("./config.js");
+    const { loadConfig, getSecurityProfile } = await import("../src/config.js");
     const config = loadConfig(path.join(tempDir, "nonexistent.json"));
 
     const cli = getSecurityProfile("cli", config);
@@ -74,7 +74,7 @@ describe("config", () => {
     writeFileSync(configPath, JSON.stringify({
       channels: { web: { auth: { type: "api-key", apiKey: "${TEST_MIKECLAW_KEY}" } } },
     }));
-    const { loadConfig } = await import("./config.js");
+    const { loadConfig } = await import("../src/config.js");
     const config = loadConfig(configPath);
     expect(config.channels.web.auth.apiKey).toBe("secret123");
     delete process.env.TEST_MIKECLAW_KEY;

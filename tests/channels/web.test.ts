@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import http from "node:http";
-import type { MikeClawConfig } from "../config.js";
-import { WebChannel } from "./web.js";
+import type { MikeClawConfig } from "../../src/config.js";
+import { WebChannel } from "../../src/channels/web.js";
 
 // Find a random available port
 function getPort(): Promise<number> {

@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { rmSync, mkdtempSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { SessionManager } from "./session.js";
-import type { MikeClawConfig } from "./config.js";
+import { SessionManager } from "../src/session.js";
+import type { MikeClawConfig } from "../src/config.js";
+
+vi.mock("../src/config.js", () => ({
+  resolvePath: (p: string) => p,
+}));
 
 function makeConfig(sessionsDir: string): MikeClawConfig {
   return {
@@ -12,12 +16,6 @@ function makeConfig(sessionsDir: string): MikeClawConfig {
     sessionTtlDays: 30,
   } as MikeClawConfig;
 }
-
-// Mock resolvePath
-import { vi } from "vitest";
-vi.mock("./config.js", () => ({
-  resolvePath: (p: string) => p,
-}));
 
 describe("SessionManager", () => {
   let tempDir: string;

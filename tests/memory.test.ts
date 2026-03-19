@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { MemoryManager } from "./memory.js";
-import type { MikeClawConfig } from "./config.js";
+import { MemoryManager } from "../src/memory.js";
+import type { MikeClawConfig } from "../src/config.js";
 
-vi.mock("./config.js", () => ({
+vi.mock("../src/config.js", () => ({
   resolvePath: (p: string) => p,
 }));
 
