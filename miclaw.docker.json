@@ -1,0 +1,49 @@
+{
+  "$comment": "Docker override — binds web server to all interfaces so port mapping works",
+  "defaultAgent": "assistant",
+  "defaultModel": "sonnet",
+  "soulDir": "./soul",
+  "skillsDir": "./skills",
+  "memoryDir": "./memory",
+  "sessionsDir": "./sessions",
+  "journalDays": 3,
+  "promptMode": "append",
+  "mcpConfig": null,
+  "permissionMode": "default",
+  "maxConcurrentProcesses": 5,
+  "maxQueueDepth": 20,
+  "maxTurnsPerSession": 20,
+  "sessionTtlDays": 30,
+  "channels": {
+    "cli": {
+      "enabled": false
+    },
+    "web": {
+      "enabled": true,
+      "port": 3456,
+      "host": "0.0.0.0",
+      "auth": {
+        "type": "none"
+      },
+      "security": {
+        "allowedPaths": [],
+        "blockedPaths": [],
+        "allowedUrls": [],
+        "blockedUrls": [],
+        "maxCostPerRequest": 0,
+        "rateLimitPerMinute": 60
+      }
+    }
+  },
+  "cron": {
+    "enabled": true,
+    "jobsFile": "./cron/jobs.json"
+  },
+  "learning": {
+    "enabled": true,
+    "model": "haiku",
+    "afterEveryTurn": false,
+    "consolidationCron": "0 2 * * *",
+    "maxLearningEntries": 200
+  }
+}

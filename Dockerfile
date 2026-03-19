@@ -14,7 +14,7 @@ COPY src/ src/
 COPY tsconfig.json ./
 
 # Copy default config and soul (can be overridden via volume mounts)
-COPY miclaw.json ./
+COPY miclaw.docker.json miclaw.json
 COPY soul/ soul/
 
 # Web server port

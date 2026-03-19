@@ -48,7 +48,7 @@ npm test       # vitest
 
 ### Docker
 
-You can also run miclaw as a container. The web channel is the primary interface in this mode.
+You can also run miclaw as a container. The web channel is the primary interface in this mode. The Dockerfile uses `miclaw.docker.json` which binds the web server to `0.0.0.0` (instead of `127.0.0.1`) so Docker port mapping works, and disables the CLI channel.
 
 First, make sure you've authenticated Claude Code on your host:
 
