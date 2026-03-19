@@ -5,7 +5,7 @@ import { MemoryManager } from "./memory.js";
 import { SkillLoader } from "./skills.js";
 import { SessionManager } from "./session.js";
 import { Learner } from "./learner.js";
-import { getSecurityProfile, resolvePath, type MikeClawConfig } from "./config.js";
+import { getSecurityProfile, resolvePath, type MiclawConfig } from "./config.js";
 import type { MessageInput, MessageOutput, AgentConfig } from "./types.js";
 import { ValidationError, SecurityViolationError } from "./types.js";
 import { RateLimiter, AuditLogger } from "./security.js";
@@ -33,7 +33,7 @@ export class Orchestrator {
   private rateLimiter = new RateLimiter();
   private auditLogger: AuditLogger;
 
-  constructor(private config: MikeClawConfig) {
+  constructor(private config: MiclawConfig) {
     this.runner = new ClaudeRunner();
     this.pool = new ProcessPool(config.maxConcurrentProcesses, config.maxQueueDepth);
     this.soul = new SoulLoader();
@@ -288,7 +288,7 @@ export class Orchestrator {
   }
 
   /** Get config (for admin) */
-  getConfig(): MikeClawConfig {
+  getConfig(): MiclawConfig {
     return this.config;
   }
 

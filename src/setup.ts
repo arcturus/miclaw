@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Interactive CLI to configure mikeclaw's soul, identity, and tools
+// Interactive CLI to configure miclaw's soul, identity, and tools
 import * as readline from "node:readline";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -135,7 +135,7 @@ function printPreview(content: string, maxLines = 6) {
 async function setup() {
   const rl = createRL();
 
-  console.log("\n\x1b[1m🔧 mikeclaw setup\x1b[0m");
+  console.log("\n\x1b[1m🔧 miclaw setup\x1b[0m");
   console.log("Configure your agent's soul, personality, and behavior.\n");
 
   // Determine soul directory
@@ -180,7 +180,7 @@ async function setup() {
   mkdirSync(soulDir, { recursive: true });
 
   // Agent name (used in templates)
-  const agentName = await ask(rl, "Agent name [mikeclaw]: ") || "mikeclaw";
+  const agentName = await ask(rl, "Agent name [miclaw]: ") || "miclaw";
   console.log();
 
   for (const fileKey of FILE_ORDER) {
@@ -236,7 +236,7 @@ async function setup() {
       console.log(`  \x1b[90m○ ${f} (skipped)\x1b[0m`);
     }
   }
-  console.log(`\nRun \x1b[1mnpm start\x1b[0m to launch mikeclaw.`);
+  console.log(`\nRun \x1b[1mnpm start\x1b[0m to launch miclaw.`);
   rl.close();
 }
 
@@ -295,14 +295,14 @@ async function editMode(rl: readline.Interface, soulDir: string) {
         break;
       }
       case "d": {
-        const agentName = extractAgentName(soulDir) || "mikeclaw";
+        const agentName = extractAgentName(soulDir) || "miclaw";
         mkdirSync(soulDir, { recursive: true });
         writeFileSync(filePath, def.template(agentName) + "\n");
         console.log(`  \x1b[32m✓\x1b[0m Reset ${fileKey} to default\n`);
         break;
       }
       case "v": {
-        const agentName = extractAgentName(soulDir) || "mikeclaw";
+        const agentName = extractAgentName(soulDir) || "miclaw";
         printBox(`Default ${fileKey}`, def.template(agentName));
         console.log();
         break;
@@ -392,7 +392,7 @@ if (command === "setup" || command === "configure" || command === "init" || !com
   console.log();
 } else if (command === "help" || command === "--help" || command === "-h") {
   console.log(`
-\x1b[1mmikeclaw setup\x1b[0m — Configure your agent's soul
+\x1b[1mmiclaw setup\x1b[0m — Configure your agent's soul
 
 Usage:
   npx tsx src/setup.ts              Interactive setup (same as 'setup')

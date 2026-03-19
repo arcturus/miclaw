@@ -12,7 +12,7 @@ describe("SkillLoader", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-skills-"));
+    tempDir = mkdtempSync(path.join(tmpdir(), "miclaw-skills-"));
   });
 
   afterEach(() => {

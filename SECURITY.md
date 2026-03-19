@@ -1,6 +1,6 @@
 # Security
 
-mikeclaw wraps a general-purpose code agent (Claude Code) and exposes it through HTTP and CLI channels. The primary threat is **untrusted input reaching an agent with host-level privileges**. Every security control below exists to contain that risk.
+miclaw wraps a general-purpose code agent (Claude Code) and exposes it through HTTP and CLI channels. The primary threat is **untrusted input reaching an agent with host-level privileges**. Every security control below exists to contain that risk.
 
 ## Threat Model
 
@@ -54,7 +54,7 @@ Prompt injection **will** occur. The architecture assumes this and designs for c
 
 ## Configuration
 
-All security options are configured per-channel in `mikeclaw.json` under `channels.<name>.security`:
+All security options are configured per-channel in `miclaw.json` under `channels.<name>.security`:
 
 ```json
 {
@@ -186,7 +186,7 @@ The web channel does **not** include `Bash`, `Write`, or `Edit` by default. This
 
 ### Authentication
 
-The web channel supports two auth modes configured in `mikeclaw.json`:
+The web channel supports two auth modes configured in `miclaw.json`:
 
 ```json
 {
@@ -194,7 +194,7 @@ The web channel supports two auth modes configured in `mikeclaw.json`:
     "web": {
       "auth": {
         "type": "api-key",
-        "apiKey": "${MIKECLAW_WEB_API_KEY}"
+        "apiKey": "${MICLAW_WEB_API_KEY}"
       }
     }
   }
@@ -225,13 +225,13 @@ For SSE connections (`/api/events`), the token can be passed as a query paramete
 
 ## Deployment Tips
 
-### Never expose mikeclaw directly to the internet
+### Never expose miclaw directly to the internet
 
 Always run it behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel) that handles TLS, additional rate limiting, and IP filtering.
 
 ### Always set an API key for the web channel
 
-Running with `"auth": { "type": "none" }` means anyone who can reach the port can interact with your agent. Set `MIKECLAW_WEB_API_KEY` in your environment and reference it in the config.
+Running with `"auth": { "type": "none" }` means anyone who can reach the port can interact with your agent. Set `MICLAW_WEB_API_KEY` in your environment and reference it in the config.
 
 ### Bind to localhost
 
@@ -247,7 +247,7 @@ The default (`[]` = project root) is reasonable for development. In production, 
 
 ### Block internal networks for WebFetch
 
-If your mikeclaw instance runs inside a VPC or corporate network, block internal hostnames to prevent SSRF:
+If your miclaw instance runs inside a VPC or corporate network, block internal hostnames to prevent SSRF:
 
 ```json
 { "blockedUrls": ["*.internal.corp", "*.local", "metadata.google.internal"] }
@@ -273,7 +273,7 @@ The admin dashboard at `/admin` has a Security tab showing violations, tool usag
 
 ### Keep the environment clean
 
-The runner strips sensitive environment variables (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `MIKECLAW_WEB_API_KEY`, etc.) from the claude subprocess environment. If you add custom secrets, add them to the `BLOCKED` list in `src/runner.ts`.
+The runner strips sensitive environment variables (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `MICLAW_WEB_API_KEY`, etc.) from the claude subprocess environment. If you add custom secrets, add them to the `BLOCKED` list in `src/runner.ts`.
 
 ## Known Limitations
 

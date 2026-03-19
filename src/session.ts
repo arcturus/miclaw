@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { resolvePath } from "./config.js";
-import type { MikeClawConfig } from "./config.js";
+import type { MiclawConfig } from "./config.js";
 import type { Session, SessionStore } from "./types.js";
 
 export class SessionManager {
@@ -11,7 +11,7 @@ export class SessionManager {
   private dirty = false;
   private sessionsFile: string;
 
-  constructor(private config: MikeClawConfig) {
+  constructor(private config: MiclawConfig) {
     const dir = resolvePath(config.sessionsDir);
     mkdirSync(dir, { recursive: true });
     this.sessionsFile = path.join(dir, "sessions.json");

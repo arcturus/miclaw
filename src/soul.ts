@@ -47,7 +47,7 @@ export class SoulLoader {
     }
 
     if (sections.length === 0) {
-      return "You are a helpful AI assistant named mikeclaw.";
+      return "You are a helpful AI assistant named miclaw.";
     }
 
     return sections.join("\n\n---\n\n");

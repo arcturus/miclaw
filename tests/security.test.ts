@@ -208,7 +208,7 @@ describe("AuditLogger", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(os.tmpdir(), "mikeclaw-audit-"));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), "miclaw-audit-"));
   });
 
   afterEach(() => {
@@ -428,7 +428,7 @@ describe("checkStreamLine", () => {
   });
 
   it("logs tool_use to audit logger", () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "mikeclaw-audit-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "miclaw-audit-"));
     const logPath = path.join(tempDir, "audit.jsonl");
     const logger = new AuditLogger(logPath);
 
@@ -455,7 +455,7 @@ describe("checkStreamLine", () => {
   });
 
   it("logs violation to audit logger when path is blocked", () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "mikeclaw-audit-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "miclaw-audit-"));
     const logPath = path.join(tempDir, "audit.jsonl");
     const logger = new AuditLogger(logPath);
     const home = os.homedir();

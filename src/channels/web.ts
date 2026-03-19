@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Channel, MessageHandler } from "../types.js";
 import { ValidationError, SecurityViolationError } from "../types.js";
-import { resolvePath, type MikeClawConfig } from "../config.js";
+import { resolvePath, type MiclawConfig } from "../config.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { CronScheduler } from "../cron.js";
 
@@ -22,7 +22,7 @@ export class WebChannel implements Channel {
   /** SSE clients keyed by userId → set of open responses */
   private sseClients: Map<string, Set<ServerResponse>> = new Map();
 
-  constructor(private config: MikeClawConfig) {}
+  constructor(private config: MiclawConfig) {}
 
   /** Inject orchestrator reference for admin API */
   setOrchestrator(orchestrator: Orchestrator): void {

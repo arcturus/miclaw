@@ -1,7 +1,7 @@
 // Layer 2: Learner — self-learning engine via post-turn reflection
 import { ClaudeRunner, ProcessPool } from "./runner.js";
 import { MemoryManager } from "./memory.js";
-import type { MikeClawConfig } from "./config.js";
+import type { MiclawConfig } from "./config.js";
 
 const EXTRACTION_PROMPT = `You are a learning extractor. Your job is to analyze a user-assistant interaction and extract useful insights for future conversations.
 
@@ -30,7 +30,7 @@ export class Learner {
   private pool: ProcessPool;
 
   constructor(
-    private config: MikeClawConfig,
+    private config: MiclawConfig,
     private memory: MemoryManager,
     pool?: ProcessPool,
   ) {

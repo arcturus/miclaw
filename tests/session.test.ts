@@ -3,18 +3,18 @@ import { rmSync, mkdtempSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { SessionManager } from "../src/session.js";
-import type { MikeClawConfig } from "../src/config.js";
+import type { MiclawConfig } from "../src/config.js";
 
 vi.mock("../src/config.js", () => ({
   resolvePath: (p: string) => p,
 }));
 
-function makeConfig(sessionsDir: string): MikeClawConfig {
+function makeConfig(sessionsDir: string): MiclawConfig {
   return {
     sessionsDir,
     maxTurnsPerSession: 5,
     sessionTtlDays: 30,
-  } as MikeClawConfig;
+  } as MiclawConfig;
 }
 
 describe("SessionManager", () => {
@@ -22,7 +22,7 @@ describe("SessionManager", () => {
   let sm: SessionManager;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-session-"));
+    tempDir = mkdtempSync(path.join(tmpdir(), "miclaw-session-"));
     sm = new SessionManager(makeConfig(tempDir));
   });
 

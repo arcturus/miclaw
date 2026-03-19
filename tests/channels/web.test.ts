@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import http from "node:http";
-import type { MikeClawConfig } from "../../src/config.js";
+import type { MiclawConfig } from "../../src/config.js";
 import { WebChannel } from "../../src/channels/web.js";
 
 // Find a random available port
@@ -56,7 +56,7 @@ describe("WebChannel", () => {
           auth: { type: "none" as const },
         },
       },
-    } as MikeClawConfig;
+    } as MiclawConfig;
     channel = new WebChannel(config);
     channel.onMessage(async (input) => ({
       result: `echo: ${input.message}`,
@@ -132,7 +132,7 @@ describe("WebChannel SSE broadcasting", () => {
           auth: { type: "none" as const },
         },
       },
-    } as MikeClawConfig;
+    } as MiclawConfig;
     channel = new WebChannel(config);
     channel.onMessage(async (input) => ({
       result: `echo: ${input.message}`,
@@ -250,7 +250,7 @@ describe("WebChannel SSE broadcasting", () => {
       channels: {
         web: { enabled: true, port: p, host: "127.0.0.1", auth: { type: "none" as const } },
       },
-    } as MikeClawConfig;
+    } as MiclawConfig;
     const ch = new WebChannel(cfg);
     ch.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
     await ch.start();
@@ -289,7 +289,7 @@ describe("WebChannel SSE with API key auth", () => {
           auth: { type: "api-key" as const, apiKey: "sse-secret" },
         },
       },
-    } as MikeClawConfig;
+    } as MiclawConfig;
     channel = new WebChannel(config);
     channel.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
     await channel.start();
@@ -345,7 +345,7 @@ describe("WebChannel with API key auth", () => {
           auth: { type: "api-key" as const, apiKey: "test-secret-key" },
         },
       },
-    } as MikeClawConfig;
+    } as MiclawConfig;
     channel = new WebChannel(config);
     channel.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
     await channel.start();

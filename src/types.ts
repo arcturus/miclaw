@@ -217,45 +217,45 @@ export interface AuditEntry {
 
 // ─── Errors ────────────────────────────────────────────────
 
-export class MikeClawError extends Error {
+export class MiclawError extends Error {
   constructor(
     message: string,
     public code: string,
   ) {
     super(message);
-    this.name = "MikeClawError";
+    this.name = "MiclawError";
   }
 }
 
-export class RunnerError extends MikeClawError {
+export class RunnerError extends MiclawError {
   constructor(message: string, code: "RUNNER_TIMEOUT" | "RUNNER_EXIT" | "RUNNER_PARSE" | "RUNNER_SPAWN") {
     super(message, code);
     this.name = "RunnerError";
   }
 }
 
-export class SessionError extends MikeClawError {
+export class SessionError extends MiclawError {
   constructor(message: string, code: "SESSION_CORRUPT" | "SESSION_EXPIRED" | "SESSION_LOCKED") {
     super(message, code);
     this.name = "SessionError";
   }
 }
 
-export class ConfigError extends MikeClawError {
+export class ConfigError extends MiclawError {
   constructor(message: string) {
     super(message, "CONFIG_ERROR");
     this.name = "ConfigError";
   }
 }
 
-export class ValidationError extends MikeClawError {
+export class ValidationError extends MiclawError {
   constructor(message: string, code: string = "INVALID_INPUT") {
     super(message, code);
     this.name = "ValidationError";
   }
 }
 
-export class SecurityViolationError extends MikeClawError {
+export class SecurityViolationError extends MiclawError {
   constructor(message: string, code: "PATH_BLOCKED" | "URL_BLOCKED" | "COST_EXCEEDED" | "RATE_LIMITED") {
     super(message, code);
     this.name = "SecurityViolationError";

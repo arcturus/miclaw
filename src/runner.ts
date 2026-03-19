@@ -31,7 +31,7 @@ function sanitizedEnv(): NodeJS.ProcessEnv {
     "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
     "DATABASE_URL", "DB_PASSWORD",
     "GITHUB_TOKEN", "GH_TOKEN",
-    "MIKECLAW_WEB_API_KEY",
+    "MICLAW_WEB_API_KEY",
   ];
   for (const key of BLOCKED) {
     delete env[key];

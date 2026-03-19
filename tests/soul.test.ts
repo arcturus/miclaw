@@ -14,7 +14,7 @@ describe("SoulLoader", () => {
   let loader: SoulLoader;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-soul-"));
+    tempDir = mkdtempSync(path.join(tmpdir(), "miclaw-soul-"));
     loader = new SoulLoader();
   });
 
@@ -25,7 +25,7 @@ describe("SoulLoader", () => {
   it("assembles all soul files when present", () => {
     writeFileSync(path.join(tempDir, "AGENTS.md"), "You are an agent");
     writeFileSync(path.join(tempDir, "SOUL.md"), "Be concise");
-    writeFileSync(path.join(tempDir, "IDENTITY.md"), "Named mikeclaw");
+    writeFileSync(path.join(tempDir, "IDENTITY.md"), "Named miclaw");
     writeFileSync(path.join(tempDir, "TOOLS.md"), "Use tools wisely");
 
     const result = loader.assemble(tempDir);
@@ -48,7 +48,7 @@ describe("SoulLoader", () => {
   });
 
   it("returns fallback when no files exist", () => {
-    const emptyDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-empty-"));
+    const emptyDir = mkdtempSync(path.join(tmpdir(), "miclaw-empty-"));
     const result = loader.assemble(emptyDir);
     expect(result).toContain("helpful AI assistant");
     rmSync(emptyDir, { recursive: true, force: true });

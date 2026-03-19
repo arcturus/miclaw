@@ -9,7 +9,7 @@ describe("config", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-config-"));
+    tempDir = mkdtempSync(path.join(tmpdir(), "miclaw-config-"));
   });
 
   afterEach(() => {
@@ -27,7 +27,7 @@ describe("config", () => {
   });
 
   it("loadConfig merges custom values over defaults", async () => {
-    const configPath = path.join(tempDir, "mikeclaw.json");
+    const configPath = path.join(tempDir, "miclaw.json");
     writeFileSync(configPath, JSON.stringify({
       defaultModel: "opus",
       journalDays: 7,
@@ -43,7 +43,7 @@ describe("config", () => {
   });
 
   it("loadConfig throws ConfigError on invalid JSON", async () => {
-    const configPath = path.join(tempDir, "mikeclaw.json");
+    const configPath = path.join(tempDir, "miclaw.json");
     writeFileSync(configPath, "not json {{{");
     const { loadConfig } = await import("../src/config.js");
     expect(() => loadConfig(configPath)).toThrow();
@@ -91,14 +91,14 @@ describe("config", () => {
   });
 
   it("resolves env vars in apiKey", async () => {
-    process.env.TEST_MIKECLAW_KEY = "secret123";
-    const configPath = path.join(tempDir, "mikeclaw.json");
+    process.env.TEST_MICLAW_KEY = "secret123";
+    const configPath = path.join(tempDir, "miclaw.json");
     writeFileSync(configPath, JSON.stringify({
-      channels: { web: { auth: { type: "api-key", apiKey: "${TEST_MIKECLAW_KEY}" } } },
+      channels: { web: { auth: { type: "api-key", apiKey: "${TEST_MICLAW_KEY}" } } },
     }));
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig(configPath);
     expect(config.channels.web.auth.apiKey).toBe("secret123");
-    delete process.env.TEST_MIKECLAW_KEY;
+    delete process.env.TEST_MICLAW_KEY;
   });
 });

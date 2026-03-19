@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 import type { Channel, AgentConfig } from "./types.js";
 
 async function main() {
-  console.log("mikeclaw v0.1.0\n");
+  console.log("miclaw v0.1.0\n");
 
   // Load config
   const configPath = process.argv[2];

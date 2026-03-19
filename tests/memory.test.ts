@@ -3,14 +3,14 @@ import { writeFileSync, mkdirSync, rmSync, mkdtempSync, readFileSync, existsSync
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { MemoryManager } from "../src/memory.js";
-import type { MikeClawConfig } from "../src/config.js";
+import type { MiclawConfig } from "../src/config.js";
 
 vi.mock("../src/config.js", () => ({
   resolvePath: (p: string) => p,
 }));
 
-function makeConfig(memoryDir: string): MikeClawConfig {
-  return { memoryDir, journalDays: 3 } as MikeClawConfig;
+function makeConfig(memoryDir: string): MiclawConfig {
+  return { memoryDir, journalDays: 3 } as MiclawConfig;
 }
 
 describe("MemoryManager", () => {
@@ -18,7 +18,7 @@ describe("MemoryManager", () => {
   let mm: MemoryManager;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), "mikeclaw-memory-"));
+    tempDir = mkdtempSync(path.join(tmpdir(), "miclaw-memory-"));
     mm = new MemoryManager(makeConfig(tempDir));
   });
 

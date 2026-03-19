@@ -1,4 +1,4 @@
-# mikeclaw Architecture Document
+# miclaw Architecture Document
 
 **Version**: 1.1.0
 **Date**: 2026-03-17
@@ -30,9 +30,9 @@
 
 ## 1. System Overview
 
-### What mikeclaw Is
+### What miclaw Is
 
-mikeclaw is a minimal agentic bot framework that operates as a **proxy layer** on top of Claude Code's `claude -p` CLI. It composes personality (soul), skills, memory, session continuity, self-learning, cron scheduling, and multi-channel delivery — without reimplementing any LLM runtime, tool execution, or MCP integration.
+miclaw is a minimal agentic bot framework that operates as a **proxy layer** on top of Claude Code's `claude -p` CLI. It composes personality (soul), skills, memory, session continuity, self-learning, cron scheduling, and multi-channel delivery — without reimplementing any LLM runtime, tool execution, or MCP integration.
 
 ### The Proxy Pattern
 
@@ -45,7 +45,7 @@ Claude Code already provides:
 - Model selection (`--model`)
 - Tool allowlisting (`--allowed-tools`)
 
-mikeclaw provides the layer **above** Claude Code:
+miclaw provides the layer **above** Claude Code:
 
 - Soul/personality composition from markdown files
 - Multi-channel message routing (CLI, Web, Telegram, etc.)
@@ -58,7 +58,7 @@ mikeclaw provides the layer **above** Claude Code:
 
 ### Why We Do Not Reimplement Tools
 
-Every tool call flows through `claude -p`. When Claude decides to read a file, run a shell command, or call an MCP server, Claude Code handles it natively. mikeclaw never intercepts, wraps, or reimplements tool execution. This means:
+Every tool call flows through `claude -p`. When Claude decides to read a file, run a shell command, or call an MCP server, Claude Code handles it natively. miclaw never intercepts, wraps, or reimplements tool execution. This means:
 
 1. Zero maintenance burden for tool implementations
 2. Automatic access to every Claude Code update
@@ -718,10 +718,10 @@ interface AgentStore {
 }
 ```
 
-### 6.7 MikeClawConfig
+### 6.7 MiclawConfig
 
 ```typescript
-interface MikeClawConfig {
+interface MiclawConfig {
   /** Default agent ID for sessions that don't specify one */
   defaultAgent: string;
 
@@ -799,7 +799,7 @@ interface MikeClawConfig {
       auth: {
         /** Authentication mode. "api-key" requires Authorization header. "none" disables auth (UNSAFE). */
         type: "none" | "api-key";
-        /** API key value. Should reference an env var: "${MIKECLAW_WEB_API_KEY}". */
+        /** API key value. Should reference an env var: "${MICLAW_WEB_API_KEY}". */
         apiKey?: string;
       };
       /** Security profile overrides for web channel */
@@ -901,7 +901,7 @@ const proc = spawn("claude", args, {
 ```bash
 claude -p \
   --output-format json \
-  --append-system-prompt "## Soul\nYou are mikeclaw...\n\n## Memory\n..." \
+  --append-system-prompt "## Soul\nYou are miclaw...\n\n## Memory\n..." \
   --model sonnet \
   --allowed-tools "Bash(npm:*)" "Read" "Write" "WebSearch" \
   "Hello, who are you?"
@@ -913,7 +913,7 @@ claude -p \
 claude -p \
   --output-format json \
   --resume abc-123-def-456 \
-  --append-system-prompt "## Soul\nYou are mikeclaw...\n\n## Memory\n..." \
+  --append-system-prompt "## Soul\nYou are miclaw...\n\n## Memory\n..." \
   "Tell me more about that."
 ```
 
@@ -977,7 +977,7 @@ The orchestrator implements automatic session rotation:
 const MAX_TURNS = config.maxTurnsPerSession; // Default: 20
 
 if (session.turnCount >= MAX_TURNS) {
-  // Rotate: start fresh Claude session, keep mikeclaw session
+  // Rotate: start fresh Claude session, keep miclaw session
   logger.info(`Rotating Claude session for ${session.id} after ${session.turnCount} turns`);
   session.claudeSessionId = null;
   session.turnCount = 0;
@@ -1012,7 +1012,7 @@ Claude Code with `--output-format json` returns a JSON object on stdout:
   "type": "result",
   "subtype": "success",
   "is_error": false,
-  "result": "Hi there! I'm mikeclaw...",
+  "result": "Hi there! I'm miclaw...",
   "session_id": "abc-123-def-456",
   "cost_usd": 0.003,
   "duration_ms": 2451,
@@ -1207,7 +1207,7 @@ The `--append-system-prompt` value has a practical limit dictated by OS argument
 
 **Target maximum**: 100,000 characters for the assembled prompt. This leaves ample room in Claude's context window for the conversation and tool outputs.
 
-**Fallback for very large prompts**: If the assembled prompt exceeds the OS argument limit, write it to a temporary file and use `--append-system-prompt "$(cat /tmp/mikeclaw-prompt-<uuid>.md)"` — however, this still hits shell limits. The robust fallback is to pipe via stdin, but `claude -p` reads the user message from the positional argument, not stdin. If this becomes an issue, the prompt can be split: core soul in `--append-system-prompt` and memory context written to a file that the agent is instructed to read.
+**Fallback for very large prompts**: If the assembled prompt exceeds the OS argument limit, write it to a temporary file and use `--append-system-prompt "$(cat /tmp/miclaw-prompt-<uuid>.md)"` — however, this still hits shell limits. The robust fallback is to pipe via stdin, but `claude -p` reads the user message from the positional argument, not stdin. If this becomes an issue, the prompt can be split: core soul in `--append-system-prompt` and memory context written to a file that the agent is instructed to read.
 
 ---
 
@@ -1332,7 +1332,7 @@ Entries matching any pattern are silently dropped and logged to the audit log.
    - Clear processed entries from `learnings.md`
    - Prune journal files older than the configured retention period (default: 14 days)
 3. Because this runs through the standard orchestrator pipeline with `--append-system-prompt`, the agent has full access to Claude Code's file tools (read, write, edit).
-4. The agent performs all file operations directly. No post-processing by mikeclaw is needed.
+4. The agent performs all file operations directly. No post-processing by miclaw is needed.
 
 ### 9.4 Mechanism 3: Agent Self-Write (Feedback Loop)
 
@@ -1350,7 +1350,7 @@ section. Use Claude Code's file tools to append to the file. Format:
 Sections: "## User Preferences", "## Patterns That Work", "## Mistakes to Avoid"
 ```
 
-This requires no mikeclaw code — the agent uses Claude Code's built-in `Edit` or `Write` tools to modify `learnings.md` directly during the conversation.
+This requires no miclaw code — the agent uses Claude Code's built-in `Edit` or `Write` tools to modify `learnings.md` directly during the conversation.
 
 ### 9.5 Deduplication Strategy
 
@@ -1378,7 +1378,7 @@ The v1.0 design had a circular trust flaw: the agent could write to files that w
 **Trusted zone** (`memory/MEMORY.md`, `memory/learnings-validated.md`):
 - Written by: Consolidation cron job only (after validation)
 - Read by: Soul assembly pipeline (injected into system prompt)
-- Protected by: file permissions (0644, owned by mikeclaw user, writable only by cron process)
+- Protected by: file permissions (0644, owned by miclaw user, writable only by cron process)
 
 **Per-user learning isolation**: Each user's learnings are written to `memory/learnings/<userId>.md`, not a shared file. This prevents one user's poisoned learnings from affecting another user's sessions.
 
@@ -1529,7 +1529,7 @@ Content-Type: application/json
 Response (200):
 ```json
 {
-  "result": "Hi! I'm mikeclaw, an AI assistant. I can help with...",
+  "result": "Hi! I'm miclaw, an AI assistant. I can help with...",
   "sessionId": "web:browser-uuid-abc-123:assistant",
   "durationMs": 3200,
   "cost": 0.003
@@ -1582,7 +1582,7 @@ function getCorsHeaders(req: IncomingMessage, allowedOrigins: string[]): Record<
 }
 ```
 
-**Production recommendation**: Set `corsOrigins` to the exact deployment domain (e.g., `["https://chat.example.com"]`). Never use `"*"` in production, as it allows any website to make API requests to mikeclaw.
+**Production recommendation**: Set `corsOrigins` to the exact deployment domain (e.g., `["https://chat.example.com"]`). Never use `"*"` in production, as it allows any website to make API requests to miclaw.
 
 ### 11.5 Rate Limiting
 
@@ -1637,7 +1637,7 @@ User identity is managed server-side. The browser stores only an opaque session 
 **Session cookie mode workflow** (future):
 
 1. User authenticates via API key on first request.
-2. Server issues `Set-Cookie: mikeclaw_session=<token>; HttpOnly; Secure; SameSite=Strict`.
+2. Server issues `Set-Cookie: miclaw_session=<token>; HttpOnly; Secure; SameSite=Strict`.
 3. Subsequent requests use the cookie automatically.
 4. Server maps session token to userId.
 
@@ -1680,19 +1680,19 @@ Layer 0 (Types/Config)  → Throws ConfigError on startup (fail fast)
 ### 12.2 Error Types
 
 ```typescript
-/** Base error class for all mikeclaw errors */
-class MikeClawError extends Error {
+/** Base error class for all miclaw errors */
+class MiclawError extends Error {
   constructor(
     message: string,
     public readonly code: string,
     public readonly cause?: Error,
   ) {
     super(message);
-    this.name = "MikeClawError";
+    this.name = "MiclawError";
   }
 }
 
-class RunnerError extends MikeClawError {
+class RunnerError extends MiclawError {
   constructor(
     message: string,
     code: "RUNNER_TIMEOUT" | "RUNNER_EXIT" | "RUNNER_PARSE" | "RUNNER_SPAWN",
@@ -1705,14 +1705,14 @@ class RunnerError extends MikeClawError {
   }
 }
 
-class SessionError extends MikeClawError {
+class SessionError extends MiclawError {
   constructor(message: string, code: "SESSION_CORRUPT" | "SESSION_NOT_FOUND" | "SESSION_WRITE") {
     super(message, code);
     this.name = "SessionError";
   }
 }
 
-class ConfigError extends MikeClawError {
+class ConfigError extends MiclawError {
   constructor(message: string) {
     super(message, "CONFIG_INVALID");
     this.name = "ConfigError";
@@ -1720,7 +1720,7 @@ class ConfigError extends MikeClawError {
 }
 
 <!-- Updated per review: missing error types (arch review P1) -->
-class MemoryError extends MikeClawError {
+class MemoryError extends MiclawError {
   constructor(
     message: string,
     code: "MEMORY_READ" | "MEMORY_WRITE" | "MEMORY_CORRUPT" | "MEMORY_LOCKED",
@@ -1730,7 +1730,7 @@ class MemoryError extends MikeClawError {
   }
 }
 
-class SoulError extends MikeClawError {
+class SoulError extends MiclawError {
   constructor(
     message: string,
     code: "SOUL_MISSING_REQUIRED" | "SOUL_READ" | "SOUL_TOO_LARGE",
@@ -1740,7 +1740,7 @@ class SoulError extends MikeClawError {
   }
 }
 
-class SkillError extends MikeClawError {
+class SkillError extends MiclawError {
   constructor(
     message: string,
     code: "SKILL_PARSE" | "SKILL_GATE_FAILED" | "SKILL_INVALID_TOOLS",
@@ -1750,7 +1750,7 @@ class SkillError extends MikeClawError {
   }
 }
 
-class CronError extends MikeClawError {
+class CronError extends MiclawError {
   constructor(
     message: string,
     code: "CRON_JOB_FAILED" | "CRON_PARSE" | "CRON_TIMEOUT",
@@ -1761,7 +1761,7 @@ class CronError extends MikeClawError {
   }
 }
 
-class ValidationError extends MikeClawError {
+class ValidationError extends MiclawError {
   constructor(message: string, code: "INVALID_INPUT" | "UNKNOWN_AGENT" | "MESSAGE_TOO_LONG" | "PATH_TRAVERSAL") {
     super(message, code);
     this.name = "ValidationError";
@@ -1842,17 +1842,17 @@ On SIGINT or SIGTERM:
 ## 13. File System Layout
 
 ```
-mikeclaw/
+miclaw/
 ├── package.json                  # Node.js project manifest
 ├── tsconfig.json                 # TypeScript configuration
-├── mikeclaw.json                 # Main configuration file
+├── miclaw.json                 # Main configuration file
 ├── agents.json                   # Agent definitions (Phase 4)
 ├── ARCHITECTURE.md               # This document
 │
 ├── src/
 │   ├── index.ts                  # Entry point: parse args, load config, start channels
 │   ├── types.ts                  # All TypeScript interfaces and type definitions
-│   ├── config.ts                 # Load mikeclaw.json, merge env vars, validate
+│   ├── config.ts                 # Load miclaw.json, merge env vars, validate
 │   ├── runner.ts                 # ClaudeRunner: spawn claude -p, parse JSON output
 │   ├── soul.ts                   # SoulLoader: read and concatenate soul markdown files
 │   ├── memory.ts                 # MemoryManager: MEMORY.md, journals, learnings.md
@@ -1906,7 +1906,7 @@ mikeclaw/
 
 | File | Created by | Modified by | Purpose |
 |------|-----------|-------------|---------|
-| `mikeclaw.json` | User | User | All framework configuration |
+| `miclaw.json` | User | User | All framework configuration |
 | `agents.json` | User | User | Multi-agent definitions |
 | `sessions/sessions.json` | SessionManager | SessionManager | Maps (channel,user,agent) to Claude session IDs |
 <!-- Updated per review: trust separation in file purposes -->
@@ -1972,7 +1972,7 @@ if (config.channels.telegram?.enabled) {
 }
 ```
 
-4. Add configuration to `mikeclaw.json`:
+4. Add configuration to `miclaw.json`:
 
 ```json
 {
@@ -2090,7 +2090,7 @@ POST /api/chat
 }
 ```
 
-2. Set `mcpConfig` in `mikeclaw.json`:
+2. Set `mcpConfig` in `miclaw.json`:
 
 ```json
 {
@@ -2098,7 +2098,7 @@ POST /api/chat
 }
 ```
 
-3. The `ClaudeRunner` passes this through to `claude -p --mcp-config ./mcp.json`. Claude Code manages the MCP server lifecycle. mikeclaw has no MCP client code.
+3. The `ClaudeRunner` passes this through to `claude -p --mcp-config ./mcp.json`. Claude Code manages the MCP server lifecycle. miclaw has no MCP client code.
 
 4. For per-agent MCP configs, set `mcpConfig` on the agent definition in `agents.json`:
 
@@ -2171,7 +2171,7 @@ JSON-lines format, one event per line:
 ### 15.4 Log Destination
 
 ```typescript
-// In mikeclaw.json
+// In miclaw.json
 {
   "logging": {
     "level": "info",
@@ -2190,7 +2190,7 @@ Audit log files are rotated daily. Retention is configurable (default: 90 days).
 - Response **content** is NOT logged (only `durationMs` and `cost`).
 - API keys are NOT logged (only whether auth succeeded/failed).
 - IP addresses ARE logged for security investigation.
-- File paths modified by Claude during tool execution are not tracked by mikeclaw (Claude Code manages its own execution). This is a known gap.
+- File paths modified by Claude during tool execution are not tracked by miclaw (Claude Code manages its own execution). This is a known gap.
 
 ---
 
@@ -2261,7 +2261,7 @@ claude -p --output-format json "Say hello"
 # Test: does plan mode prevent auto-approval of writes?
 claude -p --output-format json \
   --permission-mode plan \
-  "Create a file called /tmp/mikeclaw-test.txt with contents 'hello'"
+  "Create a file called /tmp/miclaw-test.txt with contents 'hello'"
 # PASS if Claude asks for permission or refuses (in -p mode, it may just refuse)
 # Note: -p mode may auto-approve even in plan mode. Document the actual behavior.
 ```
@@ -2307,7 +2307,7 @@ claude --version
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
-| Claude Code inherits full host privileges of the mikeclaw process | An attacker who achieves prompt injection on CLI channel has full system access | CLI channel is trusted (local user). Web channel uses restricted `--allowed-tools`. Sandboxing (containers) recommended for production. |
+| Claude Code inherits full host privileges of the miclaw process | An attacker who achieves prompt injection on CLI channel has full system access | CLI channel is trusted (local user). Web channel uses restricted `--allowed-tools`. Sandboxing (containers) recommended for production. |
 | SSRF via Claude Code tools (WebFetch, Bash curl) | Agent can be instructed to fetch internal network resources | Web channel excludes `WebFetch` from default allowed tools. Deploy with egress filtering in cloud environments. Use IMDSv2. |
 | Self-learning creates a slow feedback loop for prompt injection | A poisoned learning entry persists until consolidation | Per-user learning isolation, content validation filters, trusted/untrusted zone separation, integrity hashes on MEMORY.md |
 | No encryption at rest for journals, learnings, sessions | Sensitive data stored as plaintext files | Restrictive file permissions (0600). Journal encryption is a future enhancement. Document that users should not share credentials via chat. |
@@ -2319,7 +2319,7 @@ claude --version
 |------------|--------|------------|
 | Single-process, single-node only | No horizontal scaling | Sufficient for intended use (personal/small team bot). SQLite migration path for sessions exists if needed. |
 | `node-cron` loses job state on restart | Missed cron jobs during downtime | Future: add `cron/state.json` with last-run timestamps and catch-up logic on startup (anacron pattern) |
-| File-based session store does not support concurrent processes | Cannot run multiple mikeclaw instances against same data directory | In-memory map with periodic flush is the primary store. Single-writer architecture. |
+| File-based session store does not support concurrent processes | Cannot run multiple miclaw instances against same data directory | In-memory map with periodic flush is the primary store. Single-writer architecture. |
 | `gray-matter` YAML parsing (for skills) has had CVEs | Malicious SKILL.md could execute JS | Use `{ engines: false }` option. Validate `allowed-tools` from skills against a configurable allowlist. |
 | System prompt grows linearly with memory | Cost and context window pressure increase over time | Consolidation cron keeps MEMORY.md concise. Truncation strategy (Section 8.5) enforces a 100K character budget. Consider reducing to 20K for cost-sensitive deployments. |
 
@@ -2351,27 +2351,27 @@ See **[SECURITY.md](SECURITY.md)** for the full security reference including con
 | Journal write | < 10ms | File append |
 | Cron job dispatch | Same as `claude -p` | Same as regular message |
 
-The dominant latency in every flow is the `claude -p` subprocess. All mikeclaw overhead (soul assembly, session routing, memory injection) is negligible by comparison.
+The dominant latency in every flow is the `claude -p` subprocess. All miclaw overhead (soul assembly, session routing, memory injection) is negligible by comparison.
 
 ---
 
 ## Appendix C: Configuration Environment Variable Overrides
 
-Any configuration value can be overridden via environment variables using the pattern `MIKECLAW_<PATH>` where `<PATH>` is the uppercased, underscore-separated config key path:
+Any configuration value can be overridden via environment variables using the pattern `MICLAW_<PATH>` where `<PATH>` is the uppercased, underscore-separated config key path:
 
 <!-- Updated per review: added new config keys for concurrency, auth, session management -->
 | Config key | Environment variable |
 |-----------|---------------------|
-| `defaultModel` | `MIKECLAW_DEFAULT_MODEL` |
-| `maxConcurrentProcesses` | `MIKECLAW_MAX_CONCURRENT_PROCESSES` |
-| `maxQueueDepth` | `MIKECLAW_MAX_QUEUE_DEPTH` |
-| `maxTurnsPerSession` | `MIKECLAW_MAX_TURNS_PER_SESSION` |
-| `sessionTtlDays` | `MIKECLAW_SESSION_TTL_DAYS` |
-| `channels.web.port` | `MIKECLAW_CHANNELS_WEB_PORT` |
-| `channels.web.auth.apiKey` | `MIKECLAW_WEB_API_KEY` |
-| `learning.enabled` | `MIKECLAW_LEARNING_ENABLED` |
-| `learning.maxLearningEntries` | `MIKECLAW_LEARNING_MAX_ENTRIES` |
-| `cron.enabled` | `MIKECLAW_CRON_ENABLED` |
-| `cron.timezone` | `MIKECLAW_CRON_TIMEZONE` |
+| `defaultModel` | `MICLAW_DEFAULT_MODEL` |
+| `maxConcurrentProcesses` | `MICLAW_MAX_CONCURRENT_PROCESSES` |
+| `maxQueueDepth` | `MICLAW_MAX_QUEUE_DEPTH` |
+| `maxTurnsPerSession` | `MICLAW_MAX_TURNS_PER_SESSION` |
+| `sessionTtlDays` | `MICLAW_SESSION_TTL_DAYS` |
+| `channels.web.port` | `MICLAW_CHANNELS_WEB_PORT` |
+| `channels.web.auth.apiKey` | `MICLAW_WEB_API_KEY` |
+| `learning.enabled` | `MICLAW_LEARNING_ENABLED` |
+| `learning.maxLearningEntries` | `MICLAW_LEARNING_MAX_ENTRIES` |
+| `cron.enabled` | `MICLAW_CRON_ENABLED` |
+| `cron.timezone` | `MICLAW_CRON_TIMEZONE` |
 
-Environment variables take precedence over `mikeclaw.json` values. This allows deployment-specific configuration without modifying the config file.
+Environment variables take precedence over `miclaw.json` values. This allows deployment-specific configuration without modifying the config file.

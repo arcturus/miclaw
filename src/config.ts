@@ -4,7 +4,7 @@ import path from "node:path";
 import type { ChannelSecurityProfile } from "./types.js";
 import { ConfigError } from "./types.js";
 
-export interface MikeClawConfig {
+export interface MiclawConfig {
   defaultAgent: string;
   defaultModel: string;
   soulDir: string;
@@ -52,7 +52,7 @@ export interface MikeClawConfig {
   };
 }
 
-const DEFAULTS: MikeClawConfig = {
+const DEFAULTS: MiclawConfig = {
   defaultAgent: "assistant",
   defaultModel: "sonnet",
   soulDir: "./soul",
@@ -89,7 +89,7 @@ const DEFAULTS: MikeClawConfig = {
   },
 };
 
-/** Resolve env var references like "${MIKECLAW_WEB_API_KEY}". Warns on missing vars. */
+/** Resolve env var references like "${MICLAW_WEB_API_KEY}". Warns on missing vars. */
 function resolveEnvVars(value: string): string {
   return value.replace(/\$\{([^}]+)\}/g, (match, envKey) => {
     const resolved = process.env[envKey];
@@ -120,8 +120,8 @@ export function getProjectRoot(): string {
   return _projectRoot;
 }
 
-export function loadConfig(configPath?: string): MikeClawConfig {
-  const filePath = configPath ?? path.join(process.cwd(), "mikeclaw.json");
+export function loadConfig(configPath?: string): MiclawConfig {
+  const filePath = configPath ?? path.join(process.cwd(), "miclaw.json");
   _projectRoot = path.dirname(path.resolve(filePath));
 
   let userConfig: Record<string, unknown> = {};
@@ -134,7 +134,7 @@ export function loadConfig(configPath?: string): MikeClawConfig {
     }
   }
 
-  const config = deepMerge(DEFAULTS, userConfig) as MikeClawConfig;
+  const config = deepMerge(DEFAULTS, userConfig) as MiclawConfig;
 
   // Resolve env var references in auth apiKey
   if (config.channels.web.auth.apiKey) {
@@ -151,7 +151,7 @@ export function resolvePath(configRelative: string): string {
 }
 
 /** Default security profiles per channel */
-export function getSecurityProfile(channelName: string, config: MikeClawConfig): ChannelSecurityProfile {
+export function getSecurityProfile(channelName: string, config: MiclawConfig): ChannelSecurityProfile {
   const defaults: Record<string, ChannelSecurityProfile> = {
     cli: {
       // CLI: local user, full trust — no tool restrictions

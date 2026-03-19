@@ -2,7 +2,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import cron from "node-cron";
 import { resolvePath } from "./config.js";
-import type { MikeClawConfig } from "./config.js";
+import type { MiclawConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
 import type { CronJob, CronExecution } from "./types.js";
 
@@ -16,7 +16,7 @@ export class CronScheduler {
 
   constructor(
     private orchestrator: Orchestrator,
-    private config: MikeClawConfig,
+    private config: MiclawConfig,
     private broadcastCallback?: BroadcastCallback,
   ) {}
 

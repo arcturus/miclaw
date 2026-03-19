@@ -25,7 +25,7 @@ export class CLIChannel implements Channel {
       terminal: true,
     });
 
-    console.log("\n🤖 mikeclaw — Type a message to chat. Ctrl+C to exit.\n");
+    console.log("\n🤖 miclaw — Type a message to chat. Ctrl+C to exit.\n");
 
     const askQuestion = () => {
       this.rl?.question(this.prompt, async (input) => {

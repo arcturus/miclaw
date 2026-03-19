@@ -2,13 +2,13 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, appendFileSync } from "node:fs";
 import path from "node:path";
 import { resolvePath } from "./config.js";
-import type { MikeClawConfig } from "./config.js";
+import type { MiclawConfig } from "./config.js";
 
 export class MemoryManager {
   private memoryDir: string;
   private journalsDir: string;
 
-  constructor(private config: MikeClawConfig) {
+  constructor(private config: MiclawConfig) {
     this.memoryDir = resolvePath(config.memoryDir);
     this.journalsDir = path.join(this.memoryDir, "journals");
     mkdirSync(this.journalsDir, { recursive: true });
