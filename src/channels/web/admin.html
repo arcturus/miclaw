@@ -728,7 +728,7 @@
       if (s.toolCounts && Object.keys(s.toolCounts).length > 0) {
         document.getElementById('security-tool-breakdown').innerHTML =
           Object.entries(s.toolCounts)
-            .sort((a, b) => (b[1] as number) - (a[1] as number))
+            .sort((a, b) => b[1] - a[1])
             .map(([tool, count]) =>
               `<span class="badge badge-blue" style="margin-right:8px;margin-bottom:4px">${escHtml(String(tool))}: ${count}</span>`
             ).join('');
