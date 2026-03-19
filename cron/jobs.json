@@ -4,15 +4,16 @@
     "schedule": "0 9 * * *",
     "agent": "assistant",
     "message": "Review my recent journal entries and provide a brief morning summary of key items.",
-    "enabled": false,
-    "outputMode": "journal"
+    "enabled": true,
+    "outputMode": "broadcast",
+    "broadcastTarget": { "channel": "web", "userId": "*" }
   },
   {
     "id": "learning-consolidation",
     "schedule": "0 2 * * *",
     "agent": "assistant",
     "message": "Review memory/learnings.md and memory/journals/ from the past week. Consolidate, deduplicate, and update MEMORY.md with the most important insights. Prune journal entries older than 14 days.",
-    "enabled": false,
+    "enabled": true,
     "outputMode": "silent"
   },
   {
@@ -20,7 +21,7 @@
     "schedule": "*/30 * * * *",
     "agent": "assistant",
     "message": "{{HEARTBEAT}}",
-    "enabled": false,
+    "enabled": true,
     "outputMode": "journal"
   }
 ]
