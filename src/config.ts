@@ -162,6 +162,14 @@ export function getSecurityProfile(channelName: string, config: MikeClawConfig):
       requireAuth: false,
       learningEnabled: config.learning.enabled,
       agentWriteToMemoryEnabled: true,
+      // Security: permissive defaults for local user
+      allowedPaths: [],      // [] = project root only
+      blockedPaths: [],      // [] = use default sensitive dirs (~/.ssh, ~/.aws, etc.)
+      allowedUrls: [],       // [] = allow all URLs
+      blockedUrls: [],
+      maxCostPerRequest: 0,  // 0 = unlimited
+      rateLimitPerMinute: 0, // 0 = unlimited (local user)
+      auditEnabled: true,
     },
     web: {
       // Web: allowlist is the security gate (read-only tools only)
@@ -173,6 +181,14 @@ export function getSecurityProfile(channelName: string, config: MikeClawConfig):
       requireAuth: config.channels.web.auth.type !== "none",
       learningEnabled: config.learning.enabled,
       agentWriteToMemoryEnabled: false,
+      // Security: restrictive defaults for external users
+      allowedPaths: [],       // [] = project root only
+      blockedPaths: [],       // [] = use default sensitive dirs
+      allowedUrls: [],        // [] = allow all URLs
+      blockedUrls: [],
+      maxCostPerRequest: 0,   // 0 = unlimited (configure per deployment)
+      rateLimitPerMinute: 60, // 60 req/min per user
+      auditEnabled: true,
     },
     cron: {
       // Cron: system-generated messages, full trust
@@ -183,6 +199,14 @@ export function getSecurityProfile(channelName: string, config: MikeClawConfig):
       requireAuth: false,
       learningEnabled: false,
       agentWriteToMemoryEnabled: true,
+      // Security: permissive for system jobs
+      allowedPaths: [],       // [] = project root only
+      blockedPaths: [],       // [] = use default sensitive dirs
+      allowedUrls: [],
+      blockedUrls: [],
+      maxCostPerRequest: 0,
+      rateLimitPerMinute: 0,  // unlimited (system)
+      auditEnabled: true,
     },
   };
 

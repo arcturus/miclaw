@@ -4,6 +4,8 @@
 import { spawn } from "node:child_process";
 import type { ClaudeRunnerOptions, ClaudeRunnerResult, ClaudeJsonOutput } from "./types.js";
 import { RunnerError } from "./types.js";
+import { PathEnforcer, UrlEnforcer, AuditLogger, checkStreamLine } from "./security.js";
+import { getProjectRoot } from "./config.js";
 
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 
@@ -190,10 +192,25 @@ export class ClaudeRunner {
       console.log(`[runner:${rid}]   mcp-config=${opts.mcpConfig}`);
     }
 
+    // Set up security enforcers if a profile is provided
+    const profile = opts.securityProfile;
+    const ctx = opts.securityContext ?? { channelId: "unknown", userId: "unknown", agentId: "unknown" };
+    const pathEnforcer = profile
+      ? new PathEnforcer(profile.allowedPaths, profile.blockedPaths, getProjectRoot())
+      : null;
+    const urlEnforcer = profile && (profile.allowedUrls.length > 0 || profile.blockedUrls.length > 0)
+      ? new UrlEnforcer(profile.allowedUrls, profile.blockedUrls)
+      : null;
+    const auditLogger = profile?.auditEnabled
+      ? new AuditLogger(opts.cwd ? `${opts.cwd}/logs/audit.jsonl` : `${getProjectRoot()}/logs/audit.jsonl`)
+      : null;
+
     return new Promise<ClaudeRunnerResult>((resolve) => {
       let stdout = "";
       let stderr = "";
       let killed = false;
+      let killReason = "";
+      let lineBuf = "";
 
       const child = spawn("claude", args, {
         cwd: opts.cwd ?? process.cwd(),
@@ -206,12 +223,35 @@ export class ClaudeRunner {
       let killTimer: ReturnType<typeof setTimeout> | null = null;
       const timer = setTimeout(() => {
         killed = true;
+        killReason = `claude -p timed out after ${timeoutMs}ms`;
         child.kill("SIGTERM");
         killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
       }, timeoutMs);
 
       child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
+        const text = chunk.toString();
+        stdout += text;
+
+        // Real-time security: parse NDJSON lines as they stream in
+        if (pathEnforcer || urlEnforcer || auditLogger) {
+          lineBuf += text;
+          let nlIdx: number;
+          while ((nlIdx = lineBuf.indexOf("\n")) !== -1) {
+            const line = lineBuf.slice(0, nlIdx).trim();
+            lineBuf = lineBuf.slice(nlIdx + 1);
+            if (!line) continue;
+
+            const violation = checkStreamLine(line, pathEnforcer, urlEnforcer, auditLogger, ctx);
+            if (violation) {
+              console.warn(`[runner:${rid}] ✗ SECURITY VIOLATION: ${violation}`);
+              killed = true;
+              killReason = violation;
+              child.kill("SIGTERM");
+              setTimeout(() => child.kill("SIGKILL"), 2_000);
+              break;
+            }
+          }
+        }
       });
 
       child.stderr.on("data", (chunk: Buffer) => {
@@ -237,12 +277,12 @@ export class ClaudeRunner {
         const durationMs = Date.now() - startTime;
 
         if (killed) {
-          console.warn(`[runner:${rid}] ✗ timeout after ${timeoutMs}ms`);
+          console.warn(`[runner:${rid}] ✗ killed: ${killReason}`);
           resolve({
             result: "",
             sessionId: "",
             ok: false,
-            error: `claude -p timed out after ${timeoutMs}ms`,
+            error: killReason,
             durationMs,
           });
           return;

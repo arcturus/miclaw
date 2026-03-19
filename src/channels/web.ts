@@ -5,7 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Channel, MessageHandler } from "../types.js";
-import { ValidationError } from "../types.js";
+import { ValidationError, SecurityViolationError } from "../types.js";
 import type { MikeClawConfig } from "../config.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { CronScheduler } from "../cron.js";
@@ -67,7 +67,9 @@ export class WebChannel implements Channel {
       try {
         await this.route(req, res);
       } catch (err) {
-        const status = err instanceof ValidationError ? 400 : 500;
+        const status = err instanceof SecurityViolationError
+          ? (err.code === "RATE_LIMITED" ? 429 : 403)
+          : err instanceof ValidationError ? 400 : 500;
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }));
       }

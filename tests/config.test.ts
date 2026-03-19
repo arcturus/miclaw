@@ -68,6 +68,28 @@ describe("config", () => {
     expect(cron.maxTimeoutMs).toBe(600_000);
   });
 
+  it("getSecurityProfile includes security defaults", async () => {
+    const { loadConfig, getSecurityProfile } = await import("../src/config.js");
+    const config = loadConfig(path.join(tempDir, "nonexistent.json"));
+
+    const web = getSecurityProfile("web", config);
+    expect(web.allowedPaths).toEqual([]);
+    expect(web.blockedPaths).toEqual([]);
+    expect(web.allowedUrls).toEqual([]);
+    expect(web.blockedUrls).toEqual([]);
+    expect(web.maxCostPerRequest).toBe(0);
+    expect(web.rateLimitPerMinute).toBe(60);
+    expect(web.auditEnabled).toBe(true);
+
+    const cli = getSecurityProfile("cli", config);
+    expect(cli.rateLimitPerMinute).toBe(0); // unlimited for local user
+    expect(cli.auditEnabled).toBe(true);
+
+    const cron = getSecurityProfile("cron", config);
+    expect(cron.rateLimitPerMinute).toBe(0); // unlimited for system
+    expect(cron.auditEnabled).toBe(true);
+  });
+
   it("resolves env vars in apiKey", async () => {
     process.env.TEST_MIKECLAW_KEY = "secret123";
     const configPath = path.join(tempDir, "mikeclaw.json");

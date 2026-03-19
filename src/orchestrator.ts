@@ -5,9 +5,10 @@ import { MemoryManager } from "./memory.js";
 import { SkillLoader } from "./skills.js";
 import { SessionManager } from "./session.js";
 import { Learner } from "./learner.js";
-import { getSecurityProfile, type MikeClawConfig } from "./config.js";
+import { getSecurityProfile, resolvePath, type MikeClawConfig } from "./config.js";
 import type { MessageInput, MessageOutput, AgentConfig } from "./types.js";
-import { ValidationError } from "./types.js";
+import { ValidationError, SecurityViolationError } from "./types.js";
+import { RateLimiter, AuditLogger } from "./security.js";
 
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 let msgSeq = 0;
@@ -29,6 +30,8 @@ export class Orchestrator {
   private learner: Learner;
   private sessionLocks: Map<string, Promise<void>> = new Map();
   private agents: Map<string, AgentConfig> = new Map();
+  private rateLimiter = new RateLimiter();
+  private auditLogger: AuditLogger;
 
   constructor(private config: MikeClawConfig) {
     this.runner = new ClaudeRunner();
@@ -38,6 +41,7 @@ export class Orchestrator {
     this.skills = new SkillLoader(config.skillsDir);
     this.sessions = new SessionManager(config);
     this.learner = new Learner(config, this.memory, this.pool);
+    this.auditLogger = new AuditLogger(resolvePath("./logs/audit.jsonl"));
 
     // Pre-load skills
     this.skills.load();
@@ -92,10 +96,28 @@ export class Orchestrator {
     if (input.agentId) validateId(input.agentId, "agentId");
     validateId(input.userId, "userId");
 
+    // Rate limiting
+    if (security.rateLimitPerMinute > 0 && !this.rateLimiter.check(input.userId, security.rateLimitPerMinute)) {
+      console.warn(`[msg:${mid}] ✗ rate limited: ${input.userId}`);
+      throw new SecurityViolationError(`Rate limit exceeded (${security.rateLimitPerMinute} req/min)`, "RATE_LIMITED");
+    }
+
     // Validate message length
     if (input.message.length > security.maxMessageLength) {
       console.warn(`[msg:${mid}] ✗ rejected: message too long (${input.message.length} > ${security.maxMessageLength})`);
       throw new ValidationError(`Message exceeds maximum length of ${security.maxMessageLength} characters`, "MESSAGE_TOO_LONG");
+    }
+
+    // Audit: request start
+    if (security.auditEnabled) {
+      this.auditLogger.log({
+        timestamp: new Date().toISOString(),
+        channelId: input.channelId,
+        userId: input.userId,
+        agentId,
+        action: "request_start",
+        detail: { messageLength: input.message.length, ephemeral: !!input.ephemeral },
+      });
     }
 
     // Get or create session (skip for ephemeral)
@@ -151,6 +173,8 @@ export class Orchestrator {
         mcpConfig: agent?.mcpConfig ?? this.config.mcpConfig ?? undefined,
         timeoutMs: security.maxTimeoutMs,
         permissionMode: agent?.permissionMode ?? security.permissionMode,
+        securityProfile: security,
+        securityContext: { channelId: input.channelId, userId: input.userId, agentId },
       });
 
       // Handle runner failure
@@ -202,6 +226,33 @@ export class Orchestrator {
         this.learner.reflect(input.message, result.result).catch((err) => {
           console.warn(`[msg:${mid}] learning reflection failed: ${err}`);
         });
+      }
+
+      // Audit: request end
+      if (security.auditEnabled) {
+        this.auditLogger.log({
+          timestamp: new Date().toISOString(),
+          channelId: input.channelId,
+          userId: input.userId,
+          agentId,
+          action: "request_end",
+          detail: { cost: result.cost, durationMs: totalMs, ok: result.ok },
+        });
+      }
+
+      // Post-hoc cost enforcement
+      if (security.maxCostPerRequest > 0 && result.cost && result.cost > security.maxCostPerRequest) {
+        console.warn(`[msg:${mid}] ✗ cost exceeded: $${result.cost.toFixed(4)} > $${security.maxCostPerRequest}`);
+        if (security.auditEnabled) {
+          this.auditLogger.log({
+            timestamp: new Date().toISOString(),
+            channelId: input.channelId,
+            userId: input.userId,
+            agentId,
+            action: "violation",
+            detail: { reason: "COST_EXCEEDED", cost: result.cost, limit: security.maxCostPerRequest },
+          });
+        }
       }
 
       console.log(`[msg:${mid}] ── done ──────────────────────────────────`);

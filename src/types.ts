@@ -41,6 +41,10 @@ export interface ClaudeRunnerOptions {
   timeoutMs?: number;
   cwd?: string;
   permissionMode?: string;
+  /** Security profile for real-time enforcement during streaming */
+  securityProfile?: ChannelSecurityProfile;
+  /** Context for audit logging */
+  securityContext?: { channelId: string; userId: string; agentId: string };
 }
 
 export interface ClaudeRunnerResult {
@@ -155,6 +159,60 @@ export interface ChannelSecurityProfile {
   requireAuth: boolean;
   learningEnabled: boolean;
   agentWriteToMemoryEnabled: boolean;
+
+  /**
+   * Directories the LLM may access for file operations (Read, Write, Edit, Glob, Grep).
+   * Paths are resolved relative to the project root.
+   * Empty array = project root directory only.
+   */
+  allowedPaths: string[];
+
+  /**
+   * Directories the LLM must never access, even if a parent is in allowedPaths.
+   * Takes priority over allowedPaths. Paths resolved relative to project root.
+   * Empty array = use default blocked paths (~/.ssh, ~/.aws, ~/.gnupg, ~/.config).
+   */
+  blockedPaths: string[];
+
+  /**
+   * URL hostname patterns allowed for WebFetch/WebSearch.
+   * Supports simple wildcards: "*.example.com", "api.github.com".
+   * Empty array = allow all URLs.
+   */
+  allowedUrls: string[];
+
+  /**
+   * URL hostname patterns blocked for WebFetch/WebSearch.
+   * Checked before allowedUrls. Supports same wildcard syntax.
+   * Empty array = block nothing.
+   */
+  blockedUrls: string[];
+
+  /**
+   * Maximum cost in USD per single request. Process is terminated if exceeded.
+   * Note: cost is only known when the process completes, so enforcement is post-hoc.
+   * 0 = unlimited.
+   */
+  maxCostPerRequest: number;
+
+  /**
+   * Maximum requests per minute per userId. 0 = unlimited.
+   * Only meaningful for channels with external users (web).
+   */
+  rateLimitPerMinute: number;
+
+  /** Enable audit logging for this channel. */
+  auditEnabled: boolean;
+}
+
+export interface AuditEntry {
+  timestamp: string;
+  channelId: string;
+  userId: string;
+  agentId: string;
+  action: "tool_use" | "violation" | "request_start" | "request_end";
+  tool?: string;
+  detail?: Record<string, unknown>;
 }
 
 // ─── Errors ────────────────────────────────────────────────
@@ -194,5 +252,12 @@ export class ValidationError extends MikeClawError {
   constructor(message: string, code: string = "INVALID_INPUT") {
     super(message, code);
     this.name = "ValidationError";
+  }
+}
+
+export class SecurityViolationError extends MikeClawError {
+  constructor(message: string, code: "PATH_BLOCKED" | "URL_BLOCKED" | "COST_EXCEEDED" | "RATE_LIMITED") {
+    super(message, code);
+    this.name = "SecurityViolationError";
   }
 }
