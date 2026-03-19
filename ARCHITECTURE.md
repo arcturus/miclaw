@@ -124,10 +124,11 @@ The system operates in three trust domains with different privilege levels:
 
 <!-- Updated per review: ChannelSecurityProfile per security review architectural recommendation -->
 
-Each channel has a security profile that controls tool access, timeouts, and feature availability:
+Each channel has a security profile that controls tool access, timeouts, path/URL restrictions, rate limiting, and audit logging:
 
 ```typescript
 interface ChannelSecurityProfile {
+  // ─── Tool & Permission Controls ─────────────────────────
   /** Tool whitelist for claude -p --allowed-tools. Empty array = use agent defaults. */
   allowedTools: string[];
   /** Claude Code permission mode override for this channel */
@@ -142,6 +143,46 @@ interface ChannelSecurityProfile {
   learningEnabled: boolean;
   /** Whether the agent can write to memory files via Claude Code tools */
   agentWriteToMemoryEnabled: boolean;
+
+  // ─── Path Enforcement ───────────────────────────────────
+  /**
+   * Directories the LLM may access for file operations (Read, Write, Edit, Glob, Grep).
+   * Paths resolved relative to project root. Empty array = project root only.
+   */
+  allowedPaths: string[];
+  /**
+   * Directories the LLM must never access, even if a parent is in allowedPaths.
+   * Takes priority over allowedPaths. Empty array = use defaults (~/.ssh, ~/.aws, ~/.gnupg, ~/.config, /etc/shadow).
+   */
+  blockedPaths: string[];
+
+  // ─── URL Enforcement ────────────────────────────────────
+  /**
+   * URL hostname patterns allowed for WebFetch/WebSearch.
+   * Supports wildcards: "*.example.com" matches subdomains and the domain itself.
+   * Empty array = allow all URLs.
+   */
+  allowedUrls: string[];
+  /**
+   * URL hostname patterns blocked for WebFetch/WebSearch.
+   * Checked before allowedUrls (deny wins). Same wildcard syntax.
+   * Empty array = block nothing.
+   */
+  blockedUrls: string[];
+
+  // ─── Cost & Rate Limits ─────────────────────────────────
+  /**
+   * Maximum cost in USD per single request.
+   * Enforcement is post-hoc (cost is only known when the process completes).
+   * 0 = unlimited.
+   */
+  maxCostPerRequest: number;
+  /** Maximum requests per minute per userId. 0 = unlimited. */
+  rateLimitPerMinute: number;
+
+  // ─── Audit ──────────────────────────────────────────────
+  /** Enable audit logging for this channel. Writes to logs/audit.jsonl. */
+  auditEnabled: boolean;
 }
 ```
 
@@ -156,30 +197,127 @@ interface ChannelSecurityProfile {
     "maxTimeoutMs": 300000,
     "requireAuth": false,
     "learningEnabled": true,
-    "agentWriteToMemoryEnabled": true
+    "agentWriteToMemoryEnabled": true,
+    "allowedPaths": [],
+    "blockedPaths": [],
+    "allowedUrls": [],
+    "blockedUrls": [],
+    "maxCostPerRequest": 0,
+    "rateLimitPerMinute": 0,
+    "auditEnabled": true
   },
   "web": {
     "allowedTools": ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
-    "permissionMode": "plan",
+    "permissionMode": "bypassPermissions",
     "maxMessageLength": 50000,
     "maxTimeoutMs": 120000,
     "requireAuth": true,
     "learningEnabled": true,
-    "agentWriteToMemoryEnabled": false
+    "agentWriteToMemoryEnabled": false,
+    "allowedPaths": [],
+    "blockedPaths": [],
+    "allowedUrls": [],
+    "blockedUrls": [],
+    "maxCostPerRequest": 0,
+    "rateLimitPerMinute": 60,
+    "auditEnabled": true
   },
   "cron": {
     "allowedTools": [],
-    "permissionMode": "default",
+    "permissionMode": "bypassPermissions",
     "maxMessageLength": 200000,
     "maxTimeoutMs": 600000,
     "requireAuth": false,
     "learningEnabled": false,
-    "agentWriteToMemoryEnabled": true
+    "agentWriteToMemoryEnabled": true,
+    "allowedPaths": [],
+    "blockedPaths": [],
+    "allowedUrls": [],
+    "blockedUrls": [],
+    "maxCostPerRequest": 0,
+    "rateLimitPerMinute": 0,
+    "auditEnabled": true
   }
 }
 ```
 
-**Critical design decision**: The web channel does **not** include `Bash` or `Write` in its default allowed tools. This means web users cannot instruct the agent to execute shell commands or write files. The CLI channel is unrestricted because the local user already has shell access.
+#### Path Enforcement
+
+Real-time enforcement during the Claude subprocess NDJSON stream. When a `tool_use` event targets a path outside the allowed set or inside a blocked path, the process is **immediately killed** (SIGTERM → SIGKILL after 2s).
+
+- `allowedPaths: []` defaults to the project root directory only
+- `blockedPaths: []` defaults to sensitive directories: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, `/etc/shadow`
+- Blocked paths always win over allowed paths
+- Paths are resolved to absolute before comparison (handles `../` traversal)
+- Enforced for tools: `Read`, `Write`, `Edit`, `Glob`, `Grep`
+- **Limitation**: `Bash` tool commands are not path-checked (but web channel does not have `Bash` in its allowed tools)
+
+**Example** — allow the LLM to read documentation from another directory:
+
+```json
+{
+  "channels": {
+    "web": {
+      "security": {
+        "allowedPaths": ["./", "~/documents/project-docs"],
+        "blockedPaths": ["./secrets", "./.env"]
+      }
+    }
+  }
+}
+```
+
+#### URL Enforcement
+
+Checked on `WebFetch` and `WebSearch` tool calls. Hostnames are matched with optional wildcard support.
+
+**Example** — restrict web channel to specific APIs:
+
+```json
+{
+  "channels": {
+    "web": {
+      "security": {
+        "allowedUrls": ["api.github.com", "*.stackoverflow.com"],
+        "blockedUrls": ["*.internal.corp"]
+      }
+    }
+  }
+}
+```
+
+#### Rate Limiting
+
+Sliding-window rate limiter (60-second window) per `userId`. Returns HTTP 429 when exceeded.
+
+- CLI/cron default to `0` (unlimited) since they are local/system
+- Web defaults to `60` requests per minute per user
+
+#### Cost Enforcement
+
+Post-hoc check after the Claude process completes. The cost is only available in the final `result` event of the NDJSON stream, so this cannot prevent mid-request overspend. When exceeded, the violation is logged to the audit trail.
+
+#### Audit Logging
+
+All channels log to `logs/audit.jsonl` by default. Each line is a JSON object:
+
+```json
+{
+  "timestamp": "2026-03-19T10:30:00.000Z",
+  "channelId": "web",
+  "userId": "web-a1b2c3",
+  "agentId": "assistant",
+  "action": "tool_use",
+  "tool": "Read",
+  "detail": { "input_preview": "{\"file_path\":\"/home/user/project/src/index.ts\"}" }
+}
+```
+
+Actions: `request_start`, `request_end`, `tool_use`, `violation`.
+
+Viewable in the admin dashboard under the **Security** tab with filtering (all / violations only / tool uses), summary stats, and tool usage breakdown.
+
+**Critical design decision**: The web channel does **not** include `Bash` or `Write` in its default allowed tools. This means web users cannot instruct the agent to execute shell commands or write files. The CLI channel is unrestricted because the local user already has shell access. Path enforcement adds a second layer of protection even for read-only tools.
 
 ### 2.5 Defense-in-Depth for Prompt Injection
 
