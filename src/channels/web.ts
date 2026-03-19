@@ -126,9 +126,14 @@ export class WebChannel implements Channel {
     }
 
     // ─── Admin API (requires authentication) ───────────────
-    if (req.method === "GET" && url.pathname.startsWith("/api/admin/")) {
+    if (url.pathname.startsWith("/api/admin/")) {
       if (!this.authenticate(req, res)) return;
-      return this.handleAdmin(req, res, url);
+      if (req.method === "POST" && url.pathname === "/api/admin/cron/run") {
+        return this.adminCronRun(req, res);
+      }
+      if (req.method === "GET") {
+        return this.handleAdmin(req, res, url);
+      }
     }
 
     res.writeHead(404, { "Content-Type": "application/json" });
@@ -390,21 +395,59 @@ export class WebChannel implements Channel {
 
   private adminCron(res: ServerResponse): void {
     const jobs = this.cronScheduler?.listJobs() ?? [];
+    const allHistory = this.cronScheduler?.getHistory() ?? [];
     this.json(res, 200, {
       enabled: this.config.cron.enabled,
       jobsFile: this.config.cron.jobsFile,
       timezone: this.config.cron.timezone ?? "system",
       count: jobs.length,
-      jobs: jobs.map((j) => ({
-        id: j.id,
-        schedule: j.schedule,
-        agent: j.agent,
-        enabled: j.enabled,
-        outputMode: j.outputMode,
-        message: j.message.slice(0, 200),
-        timezone: j.timezone,
-      })),
+      jobs: jobs.map((j) => {
+        const jobHistory = this.cronScheduler?.getHistory(j.id) ?? [];
+        return {
+          id: j.id,
+          schedule: j.schedule,
+          agent: j.agent,
+          enabled: j.enabled,
+          outputMode: j.outputMode,
+          message: j.message.slice(0, 200),
+          timezone: j.timezone,
+          lastRun: jobHistory.at(-1) ?? null,
+          history: jobHistory.slice(-10),
+        };
+      }),
+      recentExecutions: allHistory.slice(0, 50),
     });
+  }
+
+  private async adminCronRun(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.cronScheduler) {
+      this.json(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const body = await readBody(req, 1000);
+    const { jobId } = JSON.parse(body);
+    if (!jobId || typeof jobId !== "string") {
+      this.json(res, 400, { error: "Missing jobId" });
+      return;
+    }
+
+    const job = this.cronScheduler.listJobs().find((j) => j.id === jobId);
+    if (!job) {
+      this.json(res, 404, { error: `Job "${jobId}" not found` });
+      return;
+    }
+
+    try {
+      await this.cronScheduler.runNow(jobId);
+      const history = this.cronScheduler.getHistory(jobId);
+      const lastRun = history.at(-1) ?? null;
+      this.json(res, 200, { ok: true, jobId, lastRun });
+    } catch (err) {
+      const history = this.cronScheduler.getHistory(jobId);
+      const lastRun = history.at(-1) ?? null;
+      this.json(res, 200, { ok: false, jobId, lastRun, error: String(err) });
+    }
   }
 
   private adminConfig(res: ServerResponse): void {

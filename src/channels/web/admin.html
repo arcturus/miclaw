@@ -292,11 +292,18 @@
 
     <!-- Cron -->
     <div class="panel" id="panel-cron">
+      <div class="grid" id="cron-stats"></div>
       <div class="block">
         <div class="block-header"><h3>Scheduled Jobs</h3><span class="meta" id="cron-meta"></span></div>
         <div class="block-body"><table><thead><tr>
-          <th>ID</th><th>Schedule</th><th>Agent</th><th>Status</th><th>Output</th><th>Message</th>
+          <th>ID</th><th>Schedule</th><th>Agent</th><th>Status</th><th>Output</th><th>Last Run</th><th>Message</th><th></th>
         </tr></thead><tbody id="cron-tbody"></tbody></table></div>
+      </div>
+      <div class="block" id="cron-recent-block" style="display:none">
+        <div class="block-header"><h3>Recent Executions</h3><span class="meta" id="cron-recent-meta"></span></div>
+        <div class="block-body"><table><thead><tr>
+          <th>Job</th><th>Time</th><th>Status</th><th>Duration</th><th>Output</th><th>Result / Error</th>
+        </tr></thead><tbody id="cron-recent-tbody"></tbody></table></div>
       </div>
     </div>
 
@@ -510,20 +517,109 @@
       const data = await fetchJSON('cron');
       document.getElementById('cron-meta').textContent = `${data.count} jobs | tz: ${data.timezone}`;
 
+      // Summary stats
+      const recent = data.recentExecutions ?? [];
+      const successes = recent.filter(e => e.status === 'success').length;
+      const errors = recent.filter(e => e.status === 'error').length;
+      const avgMs = recent.length > 0 ? Math.round(recent.reduce((s, e) => s + e.durationMs, 0) / recent.length) : 0;
+      document.getElementById('cron-stats').innerHTML = `
+        <div class="card"><div class="label">Total Runs</div><div class="value">${recent.length}</div><div class="sub">in memory</div></div>
+        <div class="card"><div class="label">Success / Error</div><div class="value" style="color:var(--green)">${successes}<span style="color:var(--text2);font-size:16px"> / </span><span style="color:${errors > 0 ? 'var(--red)' : 'var(--text2)'}">${errors}</span></div></div>
+        <div class="card"><div class="label">Avg Duration</div><div class="value">${avgMs > 1000 ? (avgMs / 1000).toFixed(1) + 's' : avgMs + 'ms'}</div></div>
+      `;
+
+      // Jobs table
       const tbody = document.getElementById('cron-tbody');
       if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">No cron jobs configured</td></tr>';
-        return;
+        tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text2)">No cron jobs configured</td></tr>';
+      } else {
+        tbody.innerHTML = data.jobs.map(j => {
+          const lr = j.lastRun;
+          const lastRunCell = lr
+            ? `<span class="badge ${lr.status === 'success' ? 'badge-green' : 'badge-red'}">${lr.status}</span> <span style="color:var(--text2)">${ago(lr.completedAt)} (${lr.durationMs}ms)</span>`
+            : '<span style="color:var(--text2)">never</span>';
+
+          const hasHistory = j.history && j.history.length > 0;
+          const historyRows = (j.history ?? []).slice().reverse().map(h => `
+            <tr>
+              <td>${new Date(h.startedAt).toLocaleString()}</td>
+              <td><span class="badge ${h.status === 'success' ? 'badge-green' : 'badge-red'}">${h.status}</span></td>
+              <td>${h.durationMs}ms</td>
+              <td><span class="badge badge-blue">${h.outputMode}</span></td>
+              <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.error ? '<span style="color:var(--red)">' + escHtml(h.error) + '</span>' : escHtml(h.resultPreview || '—')}</td>
+            </tr>
+          `).join('');
+
+          return `<tr>
+            <td style="font-weight:600">${escHtml(j.id)}</td>
+            <td><code>${escHtml(j.schedule)}</code></td>
+            <td>${escHtml(j.agent)}</td>
+            <td>${j.enabled ? '<span class="badge badge-green">enabled</span>' : '<span class="badge badge-yellow">disabled</span>'}</td>
+            <td><span class="badge badge-blue">${j.outputMode}</span></td>
+            <td>${lastRunCell}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(j.message)}</td>
+            <td style="white-space:nowrap">
+              <button class="refresh-btn" onclick="cronRunNow(this, '${escHtml(j.id)}')">run now</button>
+              ${hasHistory ? ` <button class="refresh-btn" onclick="toggleCronHistory(this)">history</button>` : ''}
+            </td>
+          </tr>
+          <tr class="cron-history-row" style="display:none"><td colspan="8" style="padding:0">
+            ${hasHistory ? `<table style="margin:8px 16px;width:calc(100% - 32px)">
+              <thead><tr><th>Time</th><th>Status</th><th>Duration</th><th>Output</th><th>Result / Error</th></tr></thead>
+              <tbody>${historyRows}</tbody>
+            </table>` : ''}
+          </td></tr>`;
+        }).join('');
       }
 
-      tbody.innerHTML = data.jobs.map(j => `<tr>
-        <td style="font-weight:600">${escHtml(j.id)}</td>
-        <td><code>${escHtml(j.schedule)}</code></td>
-        <td>${escHtml(j.agent)}</td>
-        <td>${j.enabled ? '<span class="badge badge-green">enabled</span>' : '<span class="badge badge-yellow">disabled</span>'}</td>
-        <td><span class="badge badge-blue">${j.outputMode}</span></td>
-        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(j.message)}</td>
-      </tr>`).join('');
+      // Recent executions across all jobs
+      const recentBlock = document.getElementById('cron-recent-block');
+      if (recent.length > 0) {
+        recentBlock.style.display = '';
+        document.getElementById('cron-recent-meta').textContent = `${recent.length} executions`;
+        document.getElementById('cron-recent-tbody').innerHTML = recent.slice(0, 20).map(h => `<tr>
+          <td style="font-weight:600">${escHtml(h.jobId)}</td>
+          <td title="${h.startedAt}">${ago(h.startedAt)}</td>
+          <td><span class="badge ${h.status === 'success' ? 'badge-green' : 'badge-red'}">${h.status}</span></td>
+          <td>${h.durationMs}ms</td>
+          <td><span class="badge badge-blue">${h.outputMode}</span></td>
+          <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.error ? '<span style="color:var(--red)">' + escHtml(h.error) + '</span>' : escHtml(h.resultPreview || '—')}</td>
+        </tr>`).join('');
+      } else {
+        recentBlock.style.display = 'none';
+      }
+    }
+
+    async function cronRunNow(btn, jobId) {
+      const origText = btn.textContent;
+      btn.textContent = 'running...';
+      btn.disabled = true;
+      try {
+        const res = await fetch(API + '/cron/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          btn.textContent = 'done!';
+        } else {
+          btn.textContent = 'failed';
+        }
+        setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2000);
+        // Reload the panel to show updated history
+        setTimeout(() => loadCron(), 500);
+      } catch (err) {
+        btn.textContent = 'error';
+        setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2000);
+      }
+    }
+
+    function toggleCronHistory(btn) {
+      const historyRow = btn.closest('tr').nextElementSibling;
+      const visible = historyRow.style.display !== 'none';
+      historyRow.style.display = visible ? 'none' : '';
+      btn.textContent = visible ? 'history' : 'hide';
     }
 
     async function loadAgents() {

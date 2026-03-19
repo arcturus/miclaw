@@ -4,13 +4,15 @@ import cron from "node-cron";
 import { resolvePath } from "./config.js";
 import type { MikeClawConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
-import type { CronJob } from "./types.js";
+import type { CronJob, CronExecution } from "./types.js";
 
 export type BroadcastCallback = (channelName: string, userId: string, message: string) => Promise<void>;
 
 export class CronScheduler {
   private tasks: Map<string, cron.ScheduledTask> = new Map();
   private jobs: CronJob[] = [];
+  private execHistory: Map<string, CronExecution[]> = new Map();
+  private readonly maxHistoryPerJob = 25;
 
   constructor(
     private orchestrator: Orchestrator,
@@ -82,38 +84,87 @@ export class CronScheduler {
   /** Execute a cron job through the orchestrator */
   private async executeJob(job: CronJob): Promise<void> {
     console.log(`[cron] Executing job: ${job.id}`);
-    const message = this.resolveTemplates(job.message);
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
 
-    const result = await this.orchestrator.handleMessage({
-      channelId: "cron",
-      userId: "system",
-      message,
-      agentId: job.agent,
-      ephemeral: true,
-    });
+    try {
+      const message = this.resolveTemplates(job.message);
 
-    switch (job.outputMode) {
-      case "silent":
-        // Result discarded
-        break;
-      case "journal":
-        this.orchestrator.getMemoryManager().appendJournal({
-          role: `cron:${job.id}`,
-          content: result.result,
-        });
-        break;
-      case "broadcast":
-        if (job.broadcastTarget && this.broadcastCallback) {
-          await this.broadcastCallback(
-            job.broadcastTarget.channel,
-            job.broadcastTarget.userId,
-            `[${job.id}] ${result.result}`,
-          );
-        }
-        break;
+      const result = await this.orchestrator.handleMessage({
+        channelId: "cron",
+        userId: "system",
+        message,
+        agentId: job.agent,
+        ephemeral: true,
+      });
+
+      switch (job.outputMode) {
+        case "silent":
+          // Result discarded
+          break;
+        case "journal":
+          this.orchestrator.getMemoryManager().appendJournal({
+            role: `cron:${job.id}`,
+            content: result.result,
+          });
+          break;
+        case "broadcast":
+          if (job.broadcastTarget && this.broadcastCallback) {
+            await this.broadcastCallback(
+              job.broadcastTarget.channel,
+              job.broadcastTarget.userId,
+              `[${job.id}] ${result.result}`,
+            );
+          }
+          break;
+      }
+
+      this.recordExecution({
+        jobId: job.id,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        durationMs: result.durationMs,
+        status: "success",
+        outputMode: job.outputMode,
+        resultPreview: result.result.slice(0, 500),
+      });
+
+      console.log(`[cron] Job ${job.id} completed (${result.durationMs}ms)`);
+    } catch (err) {
+      this.recordExecution({
+        jobId: job.id,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        durationMs: Date.now() - startTime,
+        status: "error",
+        outputMode: job.outputMode,
+        resultPreview: "",
+        error: String(err),
+      });
+      throw err;
     }
+  }
 
-    console.log(`[cron] Job ${job.id} completed (${result.durationMs}ms)`);
+  /** Record an execution in the per-job history ring buffer */
+  private recordExecution(exec: CronExecution): void {
+    const list = this.execHistory.get(exec.jobId) ?? [];
+    list.push(exec);
+    if (list.length > this.maxHistoryPerJob) {
+      list.shift();
+    }
+    this.execHistory.set(exec.jobId, list);
+  }
+
+  /** Get execution history, optionally filtered by job ID */
+  getHistory(jobId?: string): CronExecution[] {
+    if (jobId) {
+      return [...(this.execHistory.get(jobId) ?? [])];
+    }
+    const all: CronExecution[] = [];
+    for (const entries of this.execHistory.values()) {
+      all.push(...entries);
+    }
+    return all.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
   /** Resolve template variables in job messages (single-pass to prevent injection) */

@@ -106,6 +106,17 @@ export interface CronJob {
   permissionMode?: string;
 }
 
+export interface CronExecution {
+  jobId: string;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  status: "success" | "error";
+  outputMode: CronJob["outputMode"];
+  resultPreview: string;
+  error?: string;
+}
+
 // ─── Skills ────────────────────────────────────────────────
 
 export interface SkillDefinition {
