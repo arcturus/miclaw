@@ -187,7 +187,7 @@ Eight layers, each independently configurable per channel:
 | Memory isolation | System-read files vs agent-written files tracked separately |
 | Audit logging | Every tool use, violation, and request logged to `logs/audit.jsonl` |
 
-The default blocklist includes `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, `/etc/shadow`.
+By default, agents can only read and write within the project directory. Sensitive paths like `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, and `/etc/shadow` are blocked even if you widen access. These defaults are set in `src/config.ts` and can be overridden per-channel via the `security` section in `miclaw.json`. See [SECURITY.md](SECURITY.md) for the full threat model, configuration options, and deployment guidance.
 
 ## Configuration
 

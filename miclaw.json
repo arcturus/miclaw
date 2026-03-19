@@ -16,7 +16,15 @@
   "channels": {
     "cli": {
       "enabled": true,
-      "prompt": "you> "
+      "prompt": "you> ",
+      "security": {
+        "allowedPaths": [],
+        "blockedPaths": [],
+        "allowedUrls": [],
+        "blockedUrls": [],
+        "maxCostPerRequest": 0,
+        "rateLimitPerMinute": 0
+      }
     },
     "web": {
       "enabled": true,
@@ -24,6 +32,14 @@
       "host": "127.0.0.1",
       "auth": {
         "type": "none"
+      },
+      "security": {
+        "allowedPaths": [],
+        "blockedPaths": [],
+        "allowedUrls": [],
+        "blockedUrls": [],
+        "maxCostPerRequest": 0,
+        "rateLimitPerMinute": 60
       }
     }
   },
