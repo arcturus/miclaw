@@ -58,6 +58,13 @@
       color: #ff9090;
       white-space: pre-wrap;
     }
+    .msg.broadcast {
+      align-self: flex-start;
+      background: #1a2e1a;
+      color: #a0d8a0;
+      border-left: 3px solid #4a8;
+      border-bottom-left-radius: 4px;
+    }
     .msg .meta {
       font-size: 11px;
       color: #666;
@@ -357,8 +364,8 @@
       const div = document.createElement('div');
       div.className = `msg ${role}`;
 
-      if (role === 'assistant') {
-        // Render markdown for assistant messages
+      if (role === 'assistant' || role === 'broadcast') {
+        // Render markdown for assistant and broadcast messages
         div.innerHTML = renderMarkdown(text);
       } else {
         // Plain text for user/error messages (XSS-safe)
@@ -445,6 +452,33 @@
     });
 
     input.focus();
+
+    // ─── SSE: receive broadcast messages ─────────
+    function connectSSE() {
+      const evtSource = new EventSource('/api/events');
+
+      evtSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'broadcast') {
+            addMessage(data.message, 'broadcast', data.timestamp
+              ? new Date(data.timestamp).toLocaleTimeString()
+              : '');
+          } else if (data.type === 'connected') {
+            console.log('[sse] Connected as', data.userId);
+          }
+        } catch (err) {
+          console.warn('[sse] Bad event data:', err);
+        }
+      };
+
+      evtSource.onerror = () => {
+        console.warn('[sse] Connection lost, reconnecting...');
+        // EventSource auto-reconnects; just log it
+      };
+    }
+
+    connectSSE();
   </script>
 </body>
 </html>

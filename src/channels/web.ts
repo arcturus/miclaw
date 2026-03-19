@@ -19,6 +19,8 @@ export class WebChannel implements Channel {
   private orchestrator: Orchestrator | null = null;
   private cronScheduler: CronScheduler | null = null;
   private startedAt: string = new Date().toISOString();
+  /** SSE clients keyed by userId → set of open responses */
+  private sseClients: Map<string, Set<ServerResponse>> = new Map();
 
   constructor(private config: MikeClawConfig) {}
 
@@ -87,6 +89,13 @@ export class WebChannel implements Channel {
 
   async stop(): Promise<void> {
     if (!this.server) return;
+    // Close all SSE connections
+    for (const set of this.sseClients.values()) {
+      for (const res of set) {
+        try { res.end(); } catch { /* already closed */ }
+      }
+    }
+    this.sseClients.clear();
     return new Promise((resolve) => {
       this.server!.close(() => {
         this.server = null;
@@ -96,8 +105,27 @@ export class WebChannel implements Channel {
   }
 
   async send(userId: string, message: string): Promise<boolean> {
-    console.log(`[web] Broadcast to ${userId}: ${message.slice(0, 100)}`);
-    return false;
+    // Broadcast to all SSE clients for this userId (or all clients if userId is "*")
+    const targets = userId === "*"
+      ? [...this.sseClients.values()].flatMap((s) => [...s])
+      : [...(this.sseClients.get(userId) ?? [])];
+
+    if (targets.length === 0) {
+      console.log(`[web] No SSE clients for ${userId}, message dropped`);
+      return false;
+    }
+
+    const payload = JSON.stringify({ type: "broadcast", message, timestamp: new Date().toISOString() });
+    for (const res of targets) {
+      try {
+        res.write(`data: ${payload}\n\n`);
+      } catch {
+        // Client disconnected; cleanup happens in the close handler
+      }
+    }
+
+    console.log(`[web] Broadcast sent to ${targets.length} client(s) for ${userId}`);
+    return true;
   }
 
   private async route(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -123,6 +151,11 @@ export class WebChannel implements Channel {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
       return;
+    }
+
+    // SSE stream for broadcast messages
+    if (req.method === "GET" && url.pathname === "/api/events") {
+      return this.handleSSE(req, res);
     }
 
     // ─── Admin API (requires authentication) ───────────────
@@ -178,6 +211,44 @@ export class WebChannel implements Channel {
     return true;
   }
 
+  /** Authenticate SSE requests — accepts token via query param since EventSource can't send headers */
+  private authenticateSSE(req: IncomingMessage, res: ServerResponse): boolean {
+    const authConfig = this.config.channels.web.auth;
+    if (authConfig.type === "none") return true;
+
+    if (!authConfig.apiKey) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Server misconfigured: no API key set" }));
+      return false;
+    }
+
+    // Try Authorization header first, then fall back to ?token= query param
+    const header = req.headers.authorization;
+    let token: string | undefined;
+    if (header?.startsWith("Bearer ")) {
+      token = header.slice(7);
+    } else {
+      const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+      token = url.searchParams.get("token") ?? undefined;
+    }
+
+    if (!token) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing token" }));
+      return false;
+    }
+
+    const expected = Buffer.from(authConfig.apiKey, "utf-8");
+    const received = Buffer.from(token, "utf-8");
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid token" }));
+      return false;
+    }
+
+    return true;
+  }
+
   private async handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!this.authenticate(req, res)) return;
 
@@ -216,6 +287,54 @@ export class WebChannel implements Channel {
       cost: result.cost,
       durationMs: result.durationMs,
     }));
+  }
+
+  /** SSE endpoint — clients connect to receive broadcast messages */
+  private handleSSE(req: IncomingMessage, res: ServerResponse): void {
+    // EventSource cannot send Authorization headers, so accept token via query param
+    if (!this.authenticateSSE(req, res)) return;
+
+    const ip = req.socket.remoteAddress ?? "unknown";
+    const userId = `web-${simpleHash(ip)}`;
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    // Send initial connected event
+    res.write(`data: ${JSON.stringify({ type: "connected", userId })}\n\n`);
+
+    // Register client
+    if (!this.sseClients.has(userId)) {
+      this.sseClients.set(userId, new Set());
+    }
+    this.sseClients.get(userId)!.add(res);
+    console.log(`[web] SSE client connected: ${userId} (${this.countSSEClients()} total)`);
+
+    // Keepalive every 30s to prevent proxy/browser timeout
+    const keepalive = setInterval(() => {
+      try { res.write(": keepalive\n\n"); } catch { /* cleanup below */ }
+    }, 30_000);
+
+    // Cleanup on disconnect
+    const cleanup = () => {
+      clearInterval(keepalive);
+      const set = this.sseClients.get(userId);
+      if (set) {
+        set.delete(res);
+        if (set.size === 0) this.sseClients.delete(userId);
+      }
+      console.log(`[web] SSE client disconnected: ${userId} (${this.countSSEClients()} total)`);
+    };
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+  }
+
+  private countSSEClients(): number {
+    let count = 0;
+    for (const set of this.sseClients.values()) count += set.size;
+    return count;
   }
 
   // ─── Admin API Handler ─────────────────────────────────

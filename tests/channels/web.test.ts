@@ -117,6 +117,219 @@ describe("WebChannel", () => {
   });
 });
 
+describe("WebChannel SSE broadcasting", () => {
+  let port: number;
+  let channel: WebChannel;
+
+  beforeAll(async () => {
+    port = await getPort();
+    const config = {
+      channels: {
+        web: {
+          enabled: true,
+          port,
+          host: "127.0.0.1",
+          auth: { type: "none" as const },
+        },
+      },
+    } as MikeClawConfig;
+    channel = new WebChannel(config);
+    channel.onMessage(async (input) => ({
+      result: `echo: ${input.message}`,
+      sessionId: "test-session",
+      durationMs: 1,
+    }));
+    await channel.start();
+  });
+
+  afterAll(async () => {
+    await channel.stop();
+  });
+
+  /** Connect to SSE endpoint and collect events until done() is called */
+  function connectSSE(): { events: any[]; close: () => void; waitForEvent: () => Promise<any> } {
+    const events: any[] = [];
+    let resolveNext: ((event: any) => void) | null = null;
+
+    const req = http.get(`http://127.0.0.1:${port}/api/events`, (res) => {
+      let buffer = "";
+      res.on("data", (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+        for (const block of lines) {
+          if (block.startsWith("data: ")) {
+            try {
+              const parsed = JSON.parse(block.slice(6));
+              events.push(parsed);
+              if (resolveNext) {
+                const r = resolveNext;
+                resolveNext = null;
+                r(parsed);
+              }
+            } catch { /* skip keepalives/comments */ }
+          }
+        }
+      });
+    });
+
+    return {
+      events,
+      close: () => req.destroy(),
+      waitForEvent: () => new Promise((resolve) => {
+        // Check if we already have an unprocessed event
+        if (events.length > 0) {
+          resolve(events[events.length - 1]);
+          return;
+        }
+        resolveNext = resolve;
+      }),
+    };
+  }
+
+  it("GET /api/events returns SSE stream with connected event", async () => {
+    const sse = connectSSE();
+    const event = await sse.waitForEvent();
+    expect(event.type).toBe("connected");
+    expect(event.userId).toMatch(/^web-/);
+    sse.close();
+  });
+
+  it("send() delivers message to connected SSE client", async () => {
+    const sse = connectSSE();
+    // Wait for connected event first
+    await sse.waitForEvent();
+
+    const userId = sse.events[0].userId;
+    const sent = await channel.send(userId, "Hello from cron!");
+
+    expect(sent).toBe(true);
+
+    // Wait for broadcast event
+    const broadcast = await new Promise<any>((resolve) => {
+      const check = () => {
+        const bc = sse.events.find((e) => e.type === "broadcast");
+        if (bc) return resolve(bc);
+        setTimeout(check, 10);
+      };
+      check();
+    });
+
+    expect(broadcast.type).toBe("broadcast");
+    expect(broadcast.message).toBe("Hello from cron!");
+    expect(broadcast.timestamp).toBeTruthy();
+    sse.close();
+  });
+
+  it("send() with wildcard '*' broadcasts to all clients", async () => {
+    const sse1 = connectSSE();
+    const sse2 = connectSSE();
+    await sse1.waitForEvent();
+    await sse2.waitForEvent();
+
+    const sent = await channel.send("*", "Broadcast to all");
+    expect(sent).toBe(true);
+
+    // Both clients should receive the message
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sse1.events.some((e) => e.type === "broadcast" && e.message === "Broadcast to all")).toBe(true);
+    expect(sse2.events.some((e) => e.type === "broadcast" && e.message === "Broadcast to all")).toBe(true);
+    sse1.close();
+    sse2.close();
+  });
+
+  it("send() returns false when no clients connected for userId", async () => {
+    const sent = await channel.send("nonexistent-user", "Nobody here");
+    expect(sent).toBe(false);
+  });
+
+  it("stop() closes all SSE connections", async () => {
+    // Create a fresh channel for this test
+    const p = await getPort();
+    const cfg = {
+      channels: {
+        web: { enabled: true, port: p, host: "127.0.0.1", auth: { type: "none" as const } },
+      },
+    } as MikeClawConfig;
+    const ch = new WebChannel(cfg);
+    ch.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await ch.start();
+
+    // Connect SSE and wait for the connected event before stopping
+    const closed = new Promise<void>((resolve) => {
+      http.get(`http://127.0.0.1:${p}/api/events`, (res) => {
+        let buf = "";
+        res.on("data", (chunk) => {
+          buf += chunk.toString();
+          // Once we get the connected event, trigger stop
+          if (buf.includes('"connected"')) {
+            ch.stop();
+          }
+        });
+        res.on("close", () => resolve());
+      });
+    });
+
+    await closed;
+  });
+});
+
+describe("WebChannel SSE with API key auth", () => {
+  let port: number;
+  let channel: WebChannel;
+
+  beforeAll(async () => {
+    port = await getPort();
+    const config = {
+      channels: {
+        web: {
+          enabled: true,
+          port,
+          host: "127.0.0.1",
+          auth: { type: "api-key" as const, apiKey: "sse-secret" },
+        },
+      },
+    } as MikeClawConfig;
+    channel = new WebChannel(config);
+    channel.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await channel.start();
+  });
+
+  afterAll(async () => {
+    await channel.stop();
+  });
+
+  it("rejects SSE without token", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/events`);
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts SSE with token query param", async () => {
+    const connected = await new Promise<any>((resolve) => {
+      http.get(`http://127.0.0.1:${port}/api/events?token=sse-secret`, (res) => {
+        let buf = "";
+        res.on("data", (chunk) => {
+          buf += chunk.toString();
+          if (buf.includes("\n\n")) {
+            const data = buf.split("\n\n")[0];
+            if (data.startsWith("data: ")) {
+              resolve({ status: res.statusCode, event: JSON.parse(data.slice(6)) });
+              res.destroy();
+            }
+          }
+        });
+      });
+    });
+    expect(connected.status).toBe(200);
+    expect(connected.event.type).toBe("connected");
+  });
+
+  it("rejects SSE with wrong token", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/events?token=wrong`);
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("WebChannel with API key auth", () => {
   let port: number;
   let channel: WebChannel;
