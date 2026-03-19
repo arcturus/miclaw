@@ -46,6 +46,56 @@ npm run dev    # watch mode
 npm test       # vitest
 ```
 
+### Docker
+
+You can also run miclaw as a container. The web channel is the primary interface in this mode.
+
+First, make sure you've authenticated Claude Code on your host:
+
+```bash
+claude login
+```
+
+Then build and run:
+
+```bash
+docker build -t miclaw .
+docker run -d \
+  -p 3456:3456 \
+  -v ~/.claude:/root/.claude \
+  -v $(pwd)/memory:/app/memory \
+  -v $(pwd)/sessions:/app/sessions \
+  --name miclaw \
+  miclaw
+```
+
+The `~/.claude` mount passes your subscription auth into the container — no API key needed. The OAuth flow requires a browser, so it has to happen on the host before starting the container.
+
+If you prefer using an API key instead, replace the `~/.claude` mount with `-e ANTHROPIC_API_KEY`.
+
+Volume mounts keep memory and sessions persistent across container restarts. You can also mount a custom config or soul:
+
+```bash
+-v $(pwd)/my-config.json:/app/miclaw.json \
+-v $(pwd)/my-soul:/app/soul
+```
+
+**Using the CLI from outside the container:**
+
+The CLI channel reads from stdin, so you can attach to it interactively:
+
+```bash
+docker exec -it miclaw npx tsx src/index.ts  # starts a second instance with CLI
+```
+
+Or send one-off messages by piping directly to Claude Code inside the container:
+
+```bash
+docker exec miclaw claude -p "What's in my memory?"
+```
+
+The second approach skips miclaw's orchestration (no session tracking, no soul, no learning). For full CLI access with all miclaw features, the best option is to keep the CLI channel enabled and use `docker attach miclaw` — but note that detaching without stopping requires `Ctrl+P Ctrl+Q`.
+
 ## How a message flows
 
 ```
