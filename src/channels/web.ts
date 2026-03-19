@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Channel, MessageHandler } from "../types.js";
 import { ValidationError, SecurityViolationError } from "../types.js";
-import type { MikeClawConfig } from "../config.js";
+import { resolvePath, type MikeClawConfig } from "../config.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { CronScheduler } from "../cron.js";
 
@@ -370,6 +370,8 @@ export class WebChannel implements Channel {
         return this.adminConfig(res);
       case "agents":
         return this.adminAgents(res);
+      case "security":
+        return this.adminSecurity(res, url);
       default:
         this.json(res, 404, { error: `Unknown admin route: ${route}` });
     }
@@ -414,7 +416,26 @@ export class WebChannel implements Channel {
         enabledJobs: this.cronScheduler?.listJobs().filter((j) => j.enabled).length ?? 0,
       },
       agents: this.orchestrator!.getAgents().length,
+      security: this.getSecurityStats(),
     });
+  }
+
+  /** Quick violation count from audit log (for overview card) */
+  private getSecurityStats(): { violations: number; totalEvents: number } {
+    const auditPath = resolvePath("./logs/audit.jsonl");
+    if (!existsSync(auditPath)) return { violations: 0, totalEvents: 0 };
+    try {
+      const raw = readFileSync(auditPath, "utf-8").trim();
+      if (!raw) return { violations: 0, totalEvents: 0 };
+      const lines = raw.split("\n");
+      let violations = 0;
+      for (const line of lines) {
+        if (line.includes('"violation"')) violations++;
+      }
+      return { violations, totalEvents: lines.length };
+    } catch {
+      return { violations: 0, totalEvents: 0 };
+    }
   }
 
   private adminSessions(res: ServerResponse): void {
@@ -595,6 +616,77 @@ export class WebChannel implements Channel {
     this.json(res, 200, {
       count: agents.length,
       agents,
+    });
+  }
+
+  private adminSecurity(res: ServerResponse, url: URL): void {
+    const auditPath = resolvePath("./logs/audit.jsonl");
+    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "200", 10), 1000);
+    const filter = url.searchParams.get("filter"); // "violations", "tool_use", or null for all
+
+    if (!existsSync(auditPath)) {
+      this.json(res, 200, {
+        entries: [],
+        violations: [],
+        stats: { total: 0, violations: 0, toolUses: 0, uniqueUsers: 0 },
+      });
+      return;
+    }
+
+    let lines: string[];
+    try {
+      const raw = readFileSync(auditPath, "utf-8").trim();
+      lines = raw ? raw.split("\n") : [];
+    } catch {
+      this.json(res, 200, { entries: [], violations: [], stats: { total: 0, violations: 0, toolUses: 0, uniqueUsers: 0 } });
+      return;
+    }
+
+    // Parse all entries
+    const entries: any[] = [];
+    for (const line of lines) {
+      try { entries.push(JSON.parse(line)); } catch { /* skip malformed */ }
+    }
+
+    // Compute stats
+    const violations = entries.filter((e) => e.action === "violation");
+    const toolUses = entries.filter((e) => e.action === "tool_use");
+    const uniqueUsers = new Set(entries.map((e) => e.userId)).size;
+
+    // Tool usage breakdown
+    const toolCounts: Record<string, number> = {};
+    for (const e of toolUses) {
+      toolCounts[e.tool ?? "unknown"] = (toolCounts[e.tool ?? "unknown"] ?? 0) + 1;
+    }
+
+    // Violations by type
+    const violationsByType: Record<string, number> = {};
+    for (const v of violations) {
+      const reason = (v.detail?.reason as string)?.split(":")[0] ?? "unknown";
+      violationsByType[reason] = (violationsByType[reason] ?? 0) + 1;
+    }
+
+    // Filter
+    let filtered = entries;
+    if (filter === "violations") {
+      filtered = violations;
+    } else if (filter === "tool_use") {
+      filtered = toolUses;
+    }
+
+    // Return most recent entries (tail of the log)
+    const recent = filtered.slice(-limit).reverse();
+
+    this.json(res, 200, {
+      entries: recent,
+      stats: {
+        total: entries.length,
+        violations: violations.length,
+        toolUses: toolUses.length,
+        uniqueUsers,
+        toolCounts,
+        violationsByType,
+      },
     });
   }
 

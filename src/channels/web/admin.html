@@ -222,6 +222,7 @@
     <button data-panel="skills">Skills</button>
     <button data-panel="cron">Cron Jobs</button>
     <button data-panel="agents">Agents</button>
+    <button data-panel="security">Security</button>
     <button data-panel="config">Config</button>
   </div>
 
@@ -312,6 +313,30 @@
       <div id="agents-list"></div>
     </div>
 
+    <!-- Security -->
+    <div class="panel" id="panel-security">
+      <div class="grid" id="security-stats"></div>
+      <div style="margin-bottom:16px;display:flex;gap:6px">
+        <button class="date-pill active" id="sec-filter-all" onclick="loadSecurity()">All</button>
+        <button class="date-pill" id="sec-filter-violations" onclick="loadSecurity('violations')">Violations only</button>
+        <button class="date-pill" id="sec-filter-tools" onclick="loadSecurity('tool_use')">Tool uses</button>
+      </div>
+      <div class="block" id="security-violations-block" style="display:none">
+        <div class="block-header"><h3>Violations by Type</h3></div>
+        <div class="block-body" id="security-violations-breakdown"></div>
+      </div>
+      <div class="block">
+        <div class="block-header"><h3>Audit Log</h3><span class="meta" id="security-meta"></span></div>
+        <div class="block-body"><table><thead><tr>
+          <th>Time</th><th>Action</th><th>Channel</th><th>User</th><th>Agent</th><th>Tool</th><th>Detail</th>
+        </tr></thead><tbody id="security-tbody"></tbody></table></div>
+      </div>
+      <div class="block">
+        <div class="block-header"><h3>Tool Usage Breakdown</h3></div>
+        <div class="block-body" id="security-tool-breakdown"></div>
+      </div>
+    </div>
+
     <!-- Config -->
     <div class="panel" id="panel-config">
       <div class="block">
@@ -381,6 +406,7 @@
         <div class="card"><div class="label">Skills</div><div class="value">${data.skills.loaded}</div></div>
         <div class="card"><div class="label">Cron Jobs</div><div class="value">${data.cron.enabledJobs}/${data.cron.jobs}</div><div class="sub">enabled/total</div></div>
         <div class="card"><div class="label">Agents</div><div class="value">${data.agents}</div></div>
+        <div class="card"><div class="label">Security</div><div class="value" style="color:${data.security?.violations > 0 ? 'var(--red)' : 'var(--green)'}">${data.security?.violations ?? 0}</div><div class="sub">${data.security?.violations > 0 ? 'violations' : 'no violations'} / ${data.security?.totalEvents ?? 0} events</div></div>
       `;
 
       const channels = document.getElementById('overview-channels');
@@ -667,6 +693,76 @@
       });
     }
 
+    let securityFilter = null;
+    async function loadSecurity(filter) {
+      securityFilter = filter ?? null;
+      const url = filter ? `security?filter=${filter}` : 'security';
+      const data = await fetchJSON(url);
+      const s = data.stats;
+
+      // Update filter buttons
+      document.querySelectorAll('[id^="sec-filter-"]').forEach(b => b.classList.remove('active'));
+      document.getElementById(filter === 'violations' ? 'sec-filter-violations' : filter === 'tool_use' ? 'sec-filter-tools' : 'sec-filter-all').classList.add('active');
+
+      // Stats cards
+      document.getElementById('security-stats').innerHTML = `
+        <div class="card"><div class="label">Total Events</div><div class="value">${s.total}</div></div>
+        <div class="card"><div class="label">Violations</div><div class="value" style="color:${s.violations > 0 ? 'var(--red)' : 'var(--green)'}">${s.violations}</div></div>
+        <div class="card"><div class="label">Tool Uses</div><div class="value">${s.toolUses}</div></div>
+        <div class="card"><div class="label">Unique Users</div><div class="value">${s.uniqueUsers}</div></div>
+      `;
+
+      // Violations breakdown
+      const vBlock = document.getElementById('security-violations-block');
+      if (s.violations > 0 && s.violationsByType) {
+        vBlock.style.display = '';
+        document.getElementById('security-violations-breakdown').innerHTML =
+          Object.entries(s.violationsByType).map(([type, count]) =>
+            `<span class="badge badge-red" style="margin-right:8px;margin-bottom:4px">${escHtml(String(type))}: ${count}</span>`
+          ).join('');
+      } else {
+        vBlock.style.display = 'none';
+      }
+
+      // Tool breakdown
+      if (s.toolCounts && Object.keys(s.toolCounts).length > 0) {
+        document.getElementById('security-tool-breakdown').innerHTML =
+          Object.entries(s.toolCounts)
+            .sort((a, b) => (b[1] as number) - (a[1] as number))
+            .map(([tool, count]) =>
+              `<span class="badge badge-blue" style="margin-right:8px;margin-bottom:4px">${escHtml(String(tool))}: ${count}</span>`
+            ).join('');
+      } else {
+        document.getElementById('security-tool-breakdown').innerHTML = '<span style="color:var(--text2)">No tool usage recorded yet</span>';
+      }
+
+      // Audit log table
+      document.getElementById('security-meta').textContent = `${data.entries.length} entries shown`;
+      const tbody = document.getElementById('security-tbody');
+      if (data.entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text2)">No audit entries yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.entries.map(e => {
+        const actionBadge = e.action === 'violation' ? 'badge-red'
+          : e.action === 'tool_use' ? 'badge-blue'
+          : e.action === 'request_start' ? 'badge-green'
+          : 'badge-yellow';
+        const detail = e.detail ? escHtml(JSON.stringify(e.detail)).slice(0, 120) : '—';
+        const time = e.timestamp ? new Date(e.timestamp).toLocaleString() : '—';
+        return `<tr>
+          <td style="white-space:nowrap;font-size:11px">${time}</td>
+          <td><span class="badge ${actionBadge}">${escHtml(e.action)}</span></td>
+          <td>${escHtml(e.channelId ?? '—')}</td>
+          <td style="font-size:11px">${escHtml(e.userId ?? '—')}</td>
+          <td>${escHtml(e.agentId ?? '—')}</td>
+          <td>${e.tool ? `<span class="badge badge-blue">${escHtml(e.tool)}</span>` : '—'}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:${e.action === 'violation' ? 'var(--red)' : 'var(--text2)'}">${detail}</td>
+        </tr>`;
+      }).join('');
+    }
+
     // ─── Panel Router ───
     const loaders = {
       overview: loadOverview,
@@ -678,6 +774,7 @@
       skills: loadSkills,
       cron: loadCron,
       agents: loadAgents,
+      security: loadSecurity,
       config: loadConfig,
     };
 
