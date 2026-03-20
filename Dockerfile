@@ -17,11 +17,14 @@ COPY tsconfig.json ./
 COPY miclaw.docker.json miclaw.json
 COPY soul/ soul/
 
+# Run as non-root user — Claude Code refuses bypassPermissions as root.
+# The node:22-slim image ships with a "node" user (uid 1000) which matches most host users.
+RUN chown -R node:node /app
+USER node
+
 # Web server port
 EXPOSE 3456
 
-# Disable CLI by default in container mode — web is the primary channel.
-# Override miclaw.json via volume mount to re-enable CLI if needed.
 ENV NODE_ENV=production
 
 CMD ["npx", "tsx", "src/index.ts"]

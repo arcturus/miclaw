@@ -62,15 +62,15 @@ Then build and run:
 docker build -t miclaw .
 docker run -d \
   -p 3456:3456 \
-  -v ~/.claude:/root/.claude \
-  -v ~/.claude.json:/root/.claude.json \
+  -v ~/.claude:/home/node/.claude \
+  -v ~/.claude.json:/home/node/.claude.json \
   -v $(pwd)/memory:/app/memory \
   -v $(pwd)/sessions:/app/sessions \
   --name miclaw \
   miclaw
 ```
 
-Claude Code needs both `~/.claude/` (credentials) and `~/.claude.json` (config) to work. The OAuth flow requires a browser, so authentication has to happen on the host before starting the container.
+The container runs as the non-root `node` user (uid 1000) (Claude Code refuses `bypassPermissions` as root). Auth files mount into `/home/node/` accordingly. The OAuth flow requires a browser, so authentication has to happen on the host before starting the container.
 
 If you prefer using an API key instead, replace the `~/.claude` mount with `-e ANTHROPIC_API_KEY`.
 
