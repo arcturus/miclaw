@@ -63,13 +63,14 @@ docker build -t miclaw .
 docker run -d \
   -p 3456:3456 \
   -v ~/.claude:/root/.claude \
+  -v ~/.claude.json:/root/.claude.json \
   -v $(pwd)/memory:/app/memory \
   -v $(pwd)/sessions:/app/sessions \
   --name miclaw \
   miclaw
 ```
 
-The `~/.claude` mount passes your subscription auth into the container — no API key needed. The OAuth flow requires a browser, so it has to happen on the host before starting the container.
+Claude Code needs both `~/.claude/` (credentials) and `~/.claude.json` (config) to work. The OAuth flow requires a browser, so authentication has to happen on the host before starting the container.
 
 If you prefer using an API key instead, replace the `~/.claude` mount with `-e ANTHROPIC_API_KEY`.
 
