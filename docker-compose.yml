@@ -1,0 +1,21 @@
+services:
+  miclaw:
+    build: .
+    container_name: miclaw
+    ports:
+      - "3456:3456"
+    volumes:
+      # Claude Code auth (run `claude login` on host first)
+      - ~/.claude:/home/node/.claude
+      - ~/.claude.json:/home/node/.claude.json
+
+      # Persistent application state
+      - ./memory:/app/memory
+      - ./sessions:/app/sessions
+      - ./logs:/app/logs
+
+      # Uncomment to override defaults:
+      # - ./my-config.json:/app/miclaw.json
+      # - ./my-soul:/app/soul
+      # - ./my-cron:/app/cron
+    restart: unless-stopped

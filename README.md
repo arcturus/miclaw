@@ -56,7 +56,13 @@ First, make sure you've authenticated Claude Code on your host:
 claude login
 ```
 
-Then build and run:
+Then build and run with Docker Compose (recommended):
+
+```bash
+docker compose up -d --build
+```
+
+Or manually with `docker run`:
 
 ```bash
 docker build -t miclaw .
@@ -66,6 +72,7 @@ docker run -d \
   -v ~/.claude.json:/home/node/.claude.json \
   -v $(pwd)/memory:/app/memory \
   -v $(pwd)/sessions:/app/sessions \
+  -v $(pwd)/logs:/app/logs \
   --name miclaw \
   miclaw
 ```
@@ -74,7 +81,15 @@ Claude Code needs both `~/.claude/` (credentials and runtime state) and `~/.clau
 
 If you prefer using an API key instead, replace the two Claude mounts with `-e ANTHROPIC_API_KEY`.
 
-Volume mounts keep memory and sessions persistent across container restarts. You can also mount a custom config or soul:
+Volume mounts keep state persistent across container restarts:
+
+| Mount | Purpose |
+|-------|---------|
+| `./memory` | Long-term memory, daily journals, learnings |
+| `./sessions` | Session tracking (user/agent/channel) |
+| `./logs` | Security audit trail (`audit.jsonl`) |
+
+You can also mount a custom config or soul:
 
 ```bash
 -v $(pwd)/my-config.json:/app/miclaw.json \

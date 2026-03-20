@@ -21,7 +21,8 @@ COPY cron/ cron/
 # Run as non-root user — Claude Code refuses bypassPermissions as root.
 # The node:22-slim image ships with a "node" user (uid 1000) which matches most host users.
 # Create .claude directory so Claude Code can write its runtime state there.
-RUN chown -R node:node /app && \
+RUN mkdir -p /app/memory /app/sessions /app/logs && \
+    chown -R node:node /app && \
     mkdir -p /home/node/.claude && \
     chown -R node:node /home/node/.claude
 USER node
