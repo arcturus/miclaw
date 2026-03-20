@@ -70,9 +70,9 @@ docker run -d \
   miclaw
 ```
 
-The container runs as the non-root `node` user (uid 1000) (Claude Code refuses `bypassPermissions` as root). Auth files mount into `/home/node/` accordingly. The OAuth flow requires a browser, so authentication has to happen on the host before starting the container.
+Claude Code needs both `~/.claude/` (credentials and runtime state) and `~/.claude.json` (config) mounted into the container. The OAuth flow requires a browser, so `claude login` has to happen on the host first.
 
-If you prefer using an API key instead, replace the `~/.claude` mount with `-e ANTHROPIC_API_KEY`.
+If you prefer using an API key instead, replace the two Claude mounts with `-e ANTHROPIC_API_KEY`.
 
 Volume mounts keep memory and sessions persistent across container restarts. You can also mount a custom config or soul:
 
