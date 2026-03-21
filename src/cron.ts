@@ -53,6 +53,40 @@ export class CronScheduler {
     this.tasks.clear();
   }
 
+  /** Reload jobs from the config file, stopping old tasks and scheduling new ones */
+  reload(): { added: number; removed: number; total: number } {
+    const oldIds = new Set(this.tasks.keys());
+    this.stop();
+    this.jobs = [];
+
+    const jobsFile = resolvePath(this.config.cron.jobsFile);
+    if (!existsSync(jobsFile)) {
+      console.log("[cron] No jobs file found during reload");
+      return { added: 0, removed: oldIds.size, total: 0 };
+    }
+
+    try {
+      const raw = readFileSync(jobsFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      this.jobs = Array.isArray(parsed) ? parsed : parsed.jobs ?? [];
+    } catch (err) {
+      console.warn(`[cron] Error loading jobs during reload: ${err}`);
+      return { added: 0, removed: oldIds.size, total: 0 };
+    }
+
+    for (const job of this.jobs) {
+      if (!job.enabled) continue;
+      this.scheduleJob(job);
+    }
+
+    const newIds = new Set(this.tasks.keys());
+    const added = [...newIds].filter((id) => !oldIds.has(id)).length;
+    const removed = [...oldIds].filter((id) => !newIds.has(id)).length;
+
+    console.log(`[cron] Reloaded: ${this.tasks.size} jobs scheduled (${added} added, ${removed} removed)`);
+    return { added, removed, total: this.tasks.size };
+  }
+
   /** Schedule a single job */
   private scheduleJob(job: CronJob): void {
     if (!cron.validate(job.schedule)) {

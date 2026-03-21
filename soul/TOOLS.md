@@ -38,3 +38,9 @@ Instead, edit **`./cron/jobs.json`** to add, modify, or remove scheduled tasks. 
 - `enabled` — Set to `false` to disable without deleting
 - `outputMode` — `"broadcast"` sends to a channel, `"journal"` writes to the journal, `"silent"` runs with no output
 - `broadcastTarget` — Required when `outputMode` is `"broadcast"`. Specifies `channel` and `userId`
+
+After editing `jobs.json`, reload the cron scheduler by calling the admin API:
+```
+POST /api/admin/cron/reload
+```
+This stops all existing scheduled tasks and re-schedules from the updated file.

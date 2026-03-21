@@ -166,6 +166,9 @@ export class WebChannel implements Channel {
       if (req.method === "POST" && url.pathname === "/api/admin/cron/run") {
         return this.adminCronRun(req, res);
       }
+      if (req.method === "POST" && url.pathname === "/api/admin/cron/reload") {
+        return this.adminCronReload(res);
+      }
       if (req.method === "GET") {
         return this.handleAdmin(req, res, url);
       }
@@ -589,6 +592,20 @@ export class WebChannel implements Channel {
       const history = this.cronScheduler.getHistory(jobId);
       const lastRun = history.at(-1) ?? null;
       this.json(res, 200, { ok: false, jobId, lastRun, error: String(err) });
+    }
+  }
+
+  private adminCronReload(res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      this.json(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    try {
+      const result = this.cronScheduler.reload();
+      this.json(res, 200, { ok: true, ...result });
+    } catch (err) {
+      this.json(res, 500, { error: `Reload failed: ${err}` });
     }
   }
 
