@@ -1394,7 +1394,50 @@ The v1.0 design had a circular trust flaw: the agent could write to files that w
 
 On startup, the soul assembly pipeline verifies this hash. If `MEMORY.md` has been modified outside the consolidation process (hash mismatch), a warning is logged and the file is quarantined for review.
 
-### 9.7 maxLearningEntries Overflow Behavior
+### 9.7 Epistemic Metadata: Source Provenance and Confidence Decay
+
+<!-- Added: v1.2.0 — addresses the memory gap identified via Moltbook discussions -->
+<!-- See architecture_journals/01-the-memory-gap.md for full context -->
+
+Learning entries carry inline provenance and confidence metadata. This addresses the **undifferentiated memory problem**: without metadata, the bot treats shaky inferences with the same weight as verified facts, creating confabulation risk.
+
+**Entry format**:
+
+```
+- [Type|source:SOURCE|conf:CONFIDENCE] content (learned YYYY-MM-DD, reinforced YYYY-MM-DD xN)
+```
+
+**Source types and default confidence**:
+
+| Source | Default Conf | Decay Rate | Floor | Description |
+|--------|-------------|------------|-------|-------------|
+| `instructed` | 0.95 | **none** | 0.95 | Human said it directly. **Immutable — never decays, never pruned.** |
+| `observed` | 0.90 | none | 0.90 | Verified from API/file/data |
+| `inferred` | 0.65 | -0.02/day | 0.10 | Pattern deduced from signals |
+| `hearsay` | 0.40 | -0.03/day | 0.05 | Third-party content |
+
+**Read-time confidence computation**: Decay is computed when memories are loaded into the system prompt via `MemoryManager.computeEffectiveConfidence()`. No cron job needed for decay — it's a simple formula: `effective = max(floor, confidence - daysSinceReinforcement * rate)`.
+
+**Confidence labels in system prompt**: Each learning is annotated with `(confidence: HIGH|MED|LOW)`:
+- HIGH (≥ 0.8): very reliable
+- MED (≥ 0.5): probably true
+- LOW (< 0.5): treat as uncertain hint
+
+Entries below 0.10 effective confidence are filtered from the system prompt entirely.
+
+**Reinforcement**: When the learner detects a duplicate, instead of silently dropping it, the existing entry's reinforcement count is bumped and its date updated. This resets the decay clock and increases confidence by 0.05 (capped at 0.99).
+
+**Archive-then-prune**: The consolidation cron runs `MemoryManager.pruneLearnings()`:
+1. Parse all entries, compute effective confidence
+2. Entries below threshold → append to `memory/learnings-archived.md` with `(archived YYYY-MM-DD)`
+3. Rewrite `learnings.md` without pruned entries
+4. **Exception**: `source:instructed` entries are NEVER pruned
+
+`learnings-archived.md` is append-only and not loaded into the system prompt — purely an audit trail.
+
+**Backward compatibility**: Old-format entries (`- [Type] content (learned date)`) are parsed as `source:inferred|conf:0.70`.
+
+### 9.8 maxLearningEntries Overflow Behavior
 
 <!-- Updated per review: define behavior for maxLearningEntries (arch review P1) -->
 
@@ -1888,6 +1931,7 @@ miclaw/
 ├── memory/                       # Persistent memory (Phase 2)
 │   ├── MEMORY.md                 # Long-term consolidated memory (trusted zone)
 │   ├── learnings-validated.md    # Validated learnings promoted by consolidation cron
+│   ├── learnings-archived.md    # Pruned low-confidence learnings (audit trail, append-only)
 │   ├── learnings/                # Per-user draft learnings (untrusted zone)
 │   │   ├── local.md              # CLI user learnings
 │   │   └── user-abc-123.md       # Web user learnings

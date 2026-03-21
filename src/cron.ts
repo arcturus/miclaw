@@ -13,7 +13,6 @@ export class CronScheduler {
   private jobs: CronJob[] = [];
   private execHistory: Map<string, CronExecution[]> = new Map();
 
-
   constructor(
     private orchestrator: Orchestrator,
     private config: MiclawConfig,

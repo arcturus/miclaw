@@ -215,6 +215,35 @@ export interface AuditEntry {
   detail?: Record<string, unknown>;
 }
 
+// ─── Learnings ────────────────────────────────────────────
+
+export type LearningSource = "observed" | "inferred" | "instructed" | "hearsay";
+
+export interface ParsedLearning {
+  type: string;            // "Preference" | "Pattern" | "Mistake"
+  source: LearningSource;
+  confidence: number;      // 0.0-1.0
+  content: string;
+  learnedDate: string;     // YYYY-MM-DD
+  reinforcedDate?: string; // YYYY-MM-DD
+  reinforceCount: number;
+  raw: string;             // original line for backward compat
+}
+
+export const DEFAULT_CONFIDENCE: Record<LearningSource, number> = {
+  instructed: 0.95,
+  observed: 0.90,
+  inferred: 0.65,
+  hearsay: 0.40,
+};
+
+export const DECAY_RATES: Record<LearningSource, { rate: number; floor: number }> = {
+  instructed: { rate: 0, floor: 0.95 },
+  observed: { rate: 0, floor: 0.90 },
+  inferred: { rate: 0.02, floor: 0.10 },
+  hearsay: { rate: 0.03, floor: 0.05 },
+};
+
 // ─── Errors ────────────────────────────────────────────────
 
 export class MiclawError extends Error {

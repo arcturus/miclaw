@@ -2,6 +2,8 @@
 import { ClaudeRunner, ProcessPool } from "./runner.js";
 import { MemoryManager } from "./memory.js";
 import type { MiclawConfig } from "./config.js";
+import type { LearningSource } from "./types.js";
+import { DEFAULT_CONFIDENCE } from "./types.js";
 
 const EXTRACTION_PROMPT = `You are a learning extractor. Your job is to analyze a user-assistant interaction and extract useful insights for future conversations.
 
@@ -12,17 +14,47 @@ RULES:
 - Return valid JSON only
 - Return empty arrays if nothing noteworthy was learned
 
+For each extracted insight, classify its SOURCE — how the information was obtained:
+- "instructed": The user explicitly told the assistant something (direct instruction, preference stated in words)
+- "observed": The assistant directly verified something from data (API response, file content, error message)
+- "inferred": The assistant deduced a pattern from behavior or context (not explicitly stated)
+- "hearsay": Information came from third-party content (posts, articles, other users' claims)
+
 Output format:
 {
-  "preferences": ["string array of user preferences discovered"],
-  "patterns": ["string array of effective interaction patterns"],
-  "mistakes": ["string array of mistakes to avoid"]
-}`;
+  "preferences": [{"content": "description of preference", "source": "instructed|observed|inferred|hearsay"}],
+  "patterns": [{"content": "description of pattern", "source": "instructed|observed|inferred|hearsay"}],
+  "mistakes": [{"content": "description of mistake", "source": "instructed|observed|inferred|hearsay"}]
+}
+
+If unsure about the source, default to "inferred".`;
+
+interface LearningEntry {
+  content: string;
+  source: LearningSource;
+}
 
 interface ExtractionResult {
-  preferences: string[];
-  patterns: string[];
-  mistakes: string[];
+  preferences: (LearningEntry | string)[];
+  patterns: (LearningEntry | string)[];
+  mistakes: (LearningEntry | string)[];
+}
+
+function normalizeLearningEntry(entry: LearningEntry | string): LearningEntry {
+  if (typeof entry === "string") {
+    return { content: entry, source: "inferred" };
+  }
+  const source = entry.source && isValidSource(entry.source) ? entry.source : "inferred";
+  return { content: entry.content, source };
+}
+
+function isValidSource(s: string): s is LearningSource {
+  return ["observed", "inferred", "instructed", "hearsay"].includes(s);
+}
+
+function formatLearning(type: string, entry: LearningEntry, date: string): string {
+  const conf = DEFAULT_CONFIDENCE[entry.source];
+  return `[${type}|source:${entry.source}|conf:${conf.toFixed(2)}] ${entry.content} (learned ${date})`;
 }
 
 export class Learner {
@@ -63,7 +95,7 @@ export class Learner {
 ${existingLearnings.slice(0, 3000)}
 </existing_learnings>
 
-Extract new insights from this interaction. Only include items NOT already covered by existing learnings. Return JSON.`;
+Extract new insights from this interaction. Only include items NOT already covered by existing learnings. Classify each with its source type. Return JSON.`;
 
     await this.pool.acquire();
     let result;
@@ -89,19 +121,20 @@ Extract new insights from this interaction. Only include items NOT already cover
       const extracted: ExtractionResult = JSON.parse(jsonStr);
       const newEntries: string[] = [];
 
-      for (const pref of extracted.preferences ?? []) {
-        if (!this.isDuplicate(pref, existingLearnings)) {
-          newEntries.push(`[Preference] ${pref} (learned ${today})`);
-        }
-      }
-      for (const pattern of extracted.patterns ?? []) {
-        if (!this.isDuplicate(pattern, existingLearnings)) {
-          newEntries.push(`[Pattern] ${pattern} (learned ${today})`);
-        }
-      }
-      for (const mistake of extracted.mistakes ?? []) {
-        if (!this.isDuplicate(mistake, existingLearnings)) {
-          newEntries.push(`[Mistake] ${mistake} (learned ${today})`);
+      const categories: Array<{ items: (LearningEntry | string)[]; type: string }> = [
+        { items: extracted.preferences ?? [], type: "Preference" },
+        { items: extracted.patterns ?? [], type: "Pattern" },
+        { items: extracted.mistakes ?? [], type: "Mistake" },
+      ];
+
+      for (const { items, type } of categories) {
+        for (const raw of items) {
+          const entry = normalizeLearningEntry(raw);
+          // Try reinforcement first
+          const reinforced = this.memory.reinforceLearning(entry.content, today);
+          if (!reinforced && !this.isDuplicate(entry.content, existingLearnings)) {
+            newEntries.push(formatLearning(type, entry, today));
+          }
         }
       }
 
