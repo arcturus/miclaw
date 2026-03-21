@@ -12,7 +12,7 @@ export class CronScheduler {
   private tasks: Map<string, cron.ScheduledTask> = new Map();
   private jobs: CronJob[] = [];
   private execHistory: Map<string, CronExecution[]> = new Map();
-  private readonly maxHistoryPerJob = 25;
+
 
   constructor(
     private orchestrator: Orchestrator,
@@ -160,7 +160,7 @@ export class CronScheduler {
         durationMs: result.durationMs,
         status: "success",
         outputMode: job.outputMode,
-        resultPreview: result.result.slice(0, 500),
+        resultPreview: result.result,
       });
 
       console.log(`[cron] Job ${job.id} completed (${result.durationMs}ms)`);
@@ -183,9 +183,6 @@ export class CronScheduler {
   private recordExecution(exec: CronExecution): void {
     const list = this.execHistory.get(exec.jobId) ?? [];
     list.push(exec);
-    if (list.length > this.maxHistoryPerJob) {
-      list.shift();
-    }
     this.execHistory.set(exec.jobId, list);
   }
 

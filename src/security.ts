@@ -310,7 +310,7 @@ export function checkStreamLine(
       agentId: context.agentId,
       action: "tool_use",
       tool: toolName,
-      detail: { input_preview: JSON.stringify(input).slice(0, 200) },
+      detail: { input: JSON.stringify(input) },
     });
 
     // Check paths

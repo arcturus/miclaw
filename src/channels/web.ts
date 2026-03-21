@@ -554,13 +554,13 @@ export class WebChannel implements Channel {
           agent: j.agent,
           enabled: j.enabled,
           outputMode: j.outputMode,
-          message: j.message.slice(0, 200),
+          message: j.message,
           timezone: j.timezone,
           lastRun: jobHistory.at(-1) ?? null,
-          history: jobHistory.slice(-10),
+          history: jobHistory,
         };
       }),
-      recentExecutions: allHistory.slice(0, 50),
+      recentExecutions: allHistory,
     });
   }
 

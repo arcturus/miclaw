@@ -83,7 +83,7 @@ export class MemoryManager {
     const dateStr = new Date().toISOString().split("T")[0];
     const journalPath = path.join(this.journalsDir, `${dateStr}.md`);
     const timestamp = new Date().toISOString().split("T")[1].split(".")[0];
-    const line = `- **[${timestamp}] ${entry.role}**: ${entry.content.slice(0, 500)}\n`;
+    const line = `- **[${timestamp}] ${entry.role}**: ${entry.content}\n`;
     appendFileSync(journalPath, line, "utf-8");
   }
 
