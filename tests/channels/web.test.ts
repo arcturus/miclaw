@@ -337,7 +337,13 @@ describe("WebChannel chat history", () => {
   const journalData: Record<string, string> = {
     "2026-03-21": [
       "- **[10:00:00] user**: hello there",
-      "- **[10:00:05] assistant**: Hi! How can I help?",
+      "- **[10:00:05] assistant**: Here's the full picture:",
+      "",
+      "**Some bold text**",
+      "",
+      "```json",
+      '{ "key": "value" }',
+      "```",
       "- **[11:00:00] cron:heartbeat**: ok",
       "- **[12:00:00] user**: what time is it",
       "- **[12:00:03] assistant**: It's noon!",
@@ -403,6 +409,18 @@ describe("WebChannel chat history", () => {
     const roles = allEntries.map((e: any) => e.role);
     expect(roles).not.toContain("cron:heartbeat");
     expect(roles.every((r: string) => r === "user" || r === "assistant")).toBe(true);
+  });
+
+  it("preserves multi-line assistant content", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history`);
+    const data = res.json();
+    const mar21 = data.groups.find((g: any) => g.date === "2026-03-21");
+    const assistantEntry = mar21.entries.find((e: any) => e.time === "10:00:05");
+    expect(assistantEntry).toBeDefined();
+    expect(assistantEntry.content).toContain("full picture:");
+    expect(assistantEntry.content).toContain("**Some bold text**");
+    expect(assistantEntry.content).toContain("```json");
+    expect(assistantEntry.content).toContain('"key": "value"');
   });
 
   it("paginates with before param", async () => {

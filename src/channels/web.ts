@@ -778,16 +778,28 @@ export class WebChannel implements Channel {
   }
 }
 
-/** Parse journal markdown into structured entries */
+/** Parse journal markdown into structured entries (supports multi-line content) */
 function parseJournalEntries(content: string | null): Array<{ time: string; role: string; content: string }> {
   if (!content) return [];
-  return content.split("\n")
-    .filter((line) => line.startsWith("- **["))
-    .map((line) => {
-      const match = line.match(/^- \*\*\[(\d{2}:\d{2}:\d{2})\] (.+?)\*\*: (.+)$/);
-      if (!match) return { time: "", role: "unknown", content: line };
-      return { time: match[1], role: match[2], content: match[3] };
-    });
+  const lines = content.split("\n");
+  const entries: Array<{ time: string; role: string; content: string }> = [];
+  const entryStart = /^- \*\*\[(\d{2}:\d{2}:\d{2})\] (.+?)\*\*: (.+)$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(entryStart);
+    if (!match) continue;
+
+    // Collect continuation lines until next entry or end
+    const contentLines = [match[3]];
+    while (i + 1 < lines.length && !lines[i + 1].startsWith("- **[")) {
+      i++;
+      contentLines.push(lines[i]);
+    }
+
+    entries.push({ time: match[1], role: match[2], content: contentLines.join("\n") });
+  }
+
+  return entries;
 }
 
 /** Read request body with size limit */
