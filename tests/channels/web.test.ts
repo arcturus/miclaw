@@ -330,6 +330,124 @@ describe("WebChannel SSE with API key auth", () => {
   });
 });
 
+describe("WebChannel chat history", () => {
+  let port: number;
+  let channel: WebChannel;
+
+  const journalData: Record<string, string> = {
+    "2026-03-21": [
+      "- **[10:00:00] user**: hello there",
+      "- **[10:00:05] assistant**: Hi! How can I help?",
+      "- **[11:00:00] cron:heartbeat**: ok",
+      "- **[12:00:00] user**: what time is it",
+      "- **[12:00:03] assistant**: It's noon!",
+    ].join("\n"),
+    "2026-03-20": [
+      "- **[09:00:00] user**: good morning",
+      "- **[09:00:04] assistant**: Good morning! Ready to help.",
+      "- **[15:00:00] user**: bye",
+      "- **[15:00:02] assistant**: Goodbye!",
+    ].join("\n"),
+    "2026-03-19": [
+      "- **[08:00:00] user**: first message ever",
+      "- **[08:00:05] assistant**: Welcome!",
+    ].join("\n"),
+  };
+
+  const mockMemory = {
+    listJournalDates: () => ["2026-03-21", "2026-03-20", "2026-03-19"],
+    readJournal: (date: string) => journalData[date] ?? null,
+  };
+
+  const mockOrchestrator = {
+    getMemoryManager: () => mockMemory,
+  };
+
+  beforeAll(async () => {
+    port = await getPort();
+    const config = {
+      channels: {
+        web: {
+          enabled: true,
+          port,
+          host: "127.0.0.1",
+          auth: { type: "none" as const },
+        },
+      },
+    } as MiclawConfig;
+    channel = new WebChannel(config);
+    channel.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    (channel as any).orchestrator = mockOrchestrator;
+    await channel.start();
+  });
+
+  afterAll(async () => {
+    await channel.stop();
+  });
+
+  it("returns grouped entries without before param", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history`);
+    expect(res.status).toBe(200);
+    const data = res.json();
+    expect(data.groups).toHaveLength(3);
+    expect(data.groups[0].date).toBe("2026-03-21");
+    expect(data.groups[1].date).toBe("2026-03-20");
+    expect(data.groups[2].date).toBe("2026-03-19");
+    expect(data.hasMore).toBe(false);
+  });
+
+  it("filters out non-user/assistant roles (cron)", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history`);
+    const data = res.json();
+    const allEntries = data.groups.flatMap((g: any) => g.entries);
+    const roles = allEntries.map((e: any) => e.role);
+    expect(roles).not.toContain("cron:heartbeat");
+    expect(roles.every((r: string) => r === "user" || r === "assistant")).toBe(true);
+  });
+
+  it("paginates with before param", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history?before=2026-03-21`);
+    expect(res.status).toBe(200);
+    const data = res.json();
+    // Should only include dates before 2026-03-21
+    const dates = data.groups.map((g: any) => g.date);
+    expect(dates).not.toContain("2026-03-21");
+    expect(dates).toContain("2026-03-20");
+    expect(dates).toContain("2026-03-19");
+  });
+
+  it("returns hasMore=false when no more dates", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history?before=2026-03-19`);
+    const data = res.json();
+    expect(data.groups).toHaveLength(0);
+    expect(data.hasMore).toBe(false);
+  });
+
+  it("respects limit param", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/history?limit=3`);
+    const data = res.json();
+    const totalEntries = data.groups.flatMap((g: any) => g.entries).length;
+    expect(totalEntries).toBeLessThanOrEqual(3);
+    // With limit=3, should still have more
+    expect(data.hasMore).toBe(true);
+  });
+
+  it("returns 503 without orchestrator", async () => {
+    const p = await getPort();
+    const cfg = {
+      channels: {
+        web: { enabled: true, port: p, host: "127.0.0.1", auth: { type: "none" as const } },
+      },
+    } as MiclawConfig;
+    const ch = new WebChannel(cfg);
+    ch.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await ch.start();
+    const res = await fetch(`http://127.0.0.1:${p}/api/chat/history`);
+    expect(res.status).toBe(503);
+    await ch.stop();
+  });
+});
+
 describe("WebChannel with API key auth", () => {
   let port: number;
   let channel: WebChannel;

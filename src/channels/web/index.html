@@ -180,6 +180,31 @@
       text-align: left;
     }
     .msg.assistant th { background: #1a1a2e; color: #fff; }
+
+    /* ─── History / date separators ──────────────── */
+    .date-separator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #555;
+      font-size: 12px;
+      padding: 8px 0;
+      user-select: none;
+    }
+    .date-separator::before,
+    .date-separator::after {
+      content: '';
+      flex: 1;
+      border-top: 1px solid #222;
+    }
+    #history-loader {
+      text-align: center;
+      color: #555;
+      font-size: 12px;
+      padding: 12px;
+      display: none;
+    }
+    .msg.history { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -187,7 +212,9 @@
     <h1>miclaw</h1>
     <span class="status" id="status">ready</span>
   </header>
-  <div id="messages"></div>
+  <div id="messages">
+    <div id="history-loader">Loading older messages...</div>
+  </div>
   <div id="input-area">
     <textarea id="input" placeholder="Type a message..." rows="1"></textarea>
     <button id="send">Send</button>
@@ -479,6 +506,130 @@
     }
 
     connectSSE();
+
+    // ─── Infinite scroll: load older messages from journals ──
+
+    const historyLoader = document.getElementById('history-loader');
+    let historyBefore = null;  // date cursor for pagination
+    let historyHasMore = true;
+    let historyLoading = false;
+    let historyInitialized = false;
+
+    function formatHistoryDate(dateStr) {
+      const d = new Date(dateStr + 'T12:00:00'); // noon to avoid timezone issues
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (dateStr === today.toISOString().split('T')[0]) return 'Today';
+      if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function createDateSeparator(dateStr) {
+      const div = document.createElement('div');
+      div.className = 'date-separator';
+      div.textContent = formatHistoryDate(dateStr);
+      div.dataset.date = dateStr;
+      return div;
+    }
+
+    function createHistoryMessage(entry) {
+      const div = document.createElement('div');
+      div.className = `msg ${entry.role} history`;
+      if (entry.role === 'assistant') {
+        div.innerHTML = renderMarkdown(entry.content);
+      } else {
+        div.textContent = entry.content;
+      }
+      // Add timestamp
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = entry.time;
+      div.appendChild(meta);
+      return div;
+    }
+
+    async function loadHistory() {
+      if (historyLoading || !historyHasMore) return;
+      historyLoading = true;
+      historyLoader.style.display = 'block';
+
+      try {
+        const params = new URLSearchParams({ limit: '50' });
+        if (historyBefore) params.set('before', historyBefore);
+        const res = await fetch(`/api/chat/history?${params}`);
+        if (!res.ok) throw new Error('Failed to load history');
+        const data = await res.json();
+
+        historyHasMore = data.hasMore;
+
+        if (data.groups.length === 0) {
+          historyLoader.style.display = 'none';
+          if (!historyHasMore) {
+            historyLoader.textContent = 'Beginning of history';
+            historyLoader.style.display = 'block';
+          }
+          historyLoading = false;
+          return;
+        }
+
+        // Save scroll position relative to bottom
+        const scrollBottom = messages.scrollHeight - messages.scrollTop;
+
+        // Build fragment: groups come newest-first, we insert them in order
+        // after the loader element (which stays at top)
+        const fragment = document.createDocumentFragment();
+        for (const group of data.groups) {
+          fragment.appendChild(createDateSeparator(group.date));
+          for (const entry of group.entries) {
+            fragment.appendChild(createHistoryMessage(entry));
+          }
+        }
+
+        // Insert after the history loader
+        historyLoader.after(fragment);
+
+        // Restore scroll position so content doesn't jump
+        messages.scrollTop = messages.scrollHeight - scrollBottom;
+
+        // Update cursor to the oldest date we received
+        historyBefore = data.groups[data.groups.length - 1].date;
+
+        if (!historyHasMore) {
+          historyLoader.textContent = 'Beginning of history';
+        }
+      } catch (err) {
+        console.warn('[history] Failed to load:', err);
+        historyLoader.style.display = 'none';
+      } finally {
+        historyLoading = false;
+      }
+    }
+
+    // Detect scroll to top
+    messages.addEventListener('scroll', () => {
+      if (messages.scrollTop < 100 && historyHasMore && !historyLoading) {
+        loadHistory();
+      }
+    });
+
+    // Also add a "today" separator before live messages start
+    function ensureTodaySeparator() {
+      if (historyInitialized) return;
+      historyInitialized = true;
+      const today = new Date().toISOString().split('T')[0];
+      // Only add if there isn't one already
+      if (!messages.querySelector(`.date-separator[data-date="${today}"]`)) {
+        messages.appendChild(createDateSeparator(today));
+      }
+    }
+
+    // Patch addMessage to insert today separator on first live message
+    const _origAddMessage = addMessage;
+    addMessage = function(text, role, meta) {
+      ensureTodaySeparator();
+      _origAddMessage(text, role, meta);
+    };
   </script>
 </body>
 </html>

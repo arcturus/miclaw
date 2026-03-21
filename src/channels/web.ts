@@ -148,6 +148,11 @@ export class WebChannel implements Channel {
       return this.handleChat(req, res);
     }
 
+    // Chat history (paginated journal entries)
+    if (req.method === "GET" && url.pathname === "/api/chat/history") {
+      return this.handleChatHistory(req, res, url);
+    }
+
     // Health
     if (req.method === "GET" && url.pathname === "/api/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -292,6 +297,52 @@ export class WebChannel implements Channel {
       cost: result.cost,
       durationMs: result.durationMs,
     }));
+  }
+
+  /** Chat history — paginated journal entries for infinite scroll */
+  private handleChatHistory(req: IncomingMessage, res: ServerResponse, url: URL): void {
+    if (!this.authenticate(req, res)) return;
+    if (!this.orchestrator) {
+      this.json(res, 503, { error: "Service not ready" });
+      return;
+    }
+
+    const memory = this.orchestrator.getMemoryManager();
+    const before = url.searchParams.get("before"); // YYYY-MM-DD, exclusive upper bound
+    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 200);
+
+    const allDates = memory.listJournalDates(); // sorted newest-first
+    // Filter to dates strictly before the cursor (or all if no cursor)
+    const dates = before
+      ? allDates.filter((d) => d < before)
+      : allDates;
+
+    const groups: Array<{ date: string; entries: Array<{ time: string; role: string; content: string }> }> = [];
+    let collected = 0;
+
+    for (const date of dates) {
+      if (collected >= limit) break;
+
+      const content = memory.readJournal(date);
+      const entries = parseJournalEntries(content)
+        .filter((e) => e.role === "user" || e.role === "assistant");
+
+      if (entries.length === 0) continue;
+
+      // Take only what we need up to the limit
+      const remaining = limit - collected;
+      const slice = entries.length > remaining ? entries.slice(-remaining) : entries;
+      groups.push({ date, entries: slice });
+      collected += slice.length;
+    }
+
+    // hasMore = there are more dates we haven't exhausted
+    const oldestReturned = groups.at(-1)?.date;
+    const hasMore = oldestReturned
+      ? allDates.some((d) => d < oldestReturned)
+      : false;
+
+    this.json(res, 200, { groups, hasMore });
   }
 
   /** SSE endpoint — clients connect to receive broadcast messages */
