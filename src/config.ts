@@ -165,6 +165,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       // Security: permissive defaults for local user
       allowedPaths: [],      // [] = project root only
       blockedPaths: [],      // [] = use default sensitive dirs (~/.ssh, ~/.aws, etc.)
+      writeBlockedPaths: [], // [] = no write-specific blocks (CLI user has full trust)
       allowedUrls: [],       // [] = allow all URLs
       blockedUrls: [],
       maxCostPerRequest: 0,  // 0 = unlimited
@@ -184,6 +185,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       // Security: restrictive defaults for external users
       allowedPaths: [],       // [] = project root only
       blockedPaths: [],       // [] = use default sensitive dirs
+      writeBlockedPaths: [],  // [] = no write-specific blocks (web has no Write/Edit tools anyway)
       allowedUrls: [],        // [] = allow all URLs
       blockedUrls: [],
       maxCostPerRequest: 0,   // 0 = unlimited (configure per deployment)
@@ -199,9 +201,10 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       requireAuth: false,
       learningEnabled: false,
       agentWriteToMemoryEnabled: true,
-      // Security: permissive for system jobs
+      // Security: permissive for system jobs, but protect trusted memory files
       allowedPaths: [],       // [] = project root only
       blockedPaths: [],       // [] = use default sensitive dirs
+      writeBlockedPaths: ["memory/MEMORY.md", "memory/learnings-validated.md"],
       allowedUrls: [],
       blockedUrls: [],
       maxCostPerRequest: 0,

@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import {
   PathEnforcer,
+  WritePathEnforcer,
   UrlEnforcer,
   RateLimiter,
   AuditLogger,
@@ -91,6 +92,40 @@ describe("PathEnforcer", () => {
     const enforcer = new PathEnforcer([], [], "/home/user/pro");
     // "/home/user/project" should NOT match allowed path "/home/user/pro"
     expect(enforcer.check("/home/user/project/file.ts")).not.toBeNull();
+  });
+});
+
+// ─── WritePathEnforcer ────────────────────────────────────────
+
+describe("WritePathEnforcer", () => {
+  const projectRoot = "/home/user/project";
+
+  it("allows writes when no paths are blocked", () => {
+    const enforcer = new WritePathEnforcer([], projectRoot);
+    expect(enforcer.check("/home/user/project/memory/MEMORY.md")).toBeNull();
+  });
+
+  it("blocks writes to specific files", () => {
+    const enforcer = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    const result = enforcer.check("/home/user/project/memory/MEMORY.md");
+    expect(result).not.toBeNull();
+    expect(result).toContain("Write blocked");
+  });
+
+  it("allows writes to non-blocked files in the same directory", () => {
+    const enforcer = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    expect(enforcer.check("/home/user/project/memory/learnings.md")).toBeNull();
+  });
+
+  it("blocks writes to files under a blocked directory", () => {
+    const enforcer = new WritePathEnforcer(["memory/"], projectRoot);
+    expect(enforcer.check("/home/user/project/memory/anything.md")).not.toBeNull();
+    expect(enforcer.check("/home/user/project/memory/learnings.md")).not.toBeNull();
+  });
+
+  it("allows writes to files outside blocked paths", () => {
+    const enforcer = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    expect(enforcer.check("/home/user/project/src/index.ts")).toBeNull();
   });
 });
 
@@ -481,5 +516,73 @@ describe("checkStreamLine", () => {
     expect(entries[1].action).toBe("violation");
 
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("blocks Write tool to write-blocked path", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          name: "Write",
+          input: { file_path: "/home/user/project/memory/MEMORY.md", content: "hacked" },
+        }],
+      },
+    });
+    const pathE = new PathEnforcer([], [], projectRoot);
+    const writeE = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    const result = checkStreamLine(line, pathE, null, null, ctx, writeE);
+    expect(result).not.toBeNull();
+    expect(result).toContain("Write blocked");
+  });
+
+  it("blocks Edit tool to write-blocked path", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          name: "Edit",
+          input: { file_path: "/home/user/project/memory/MEMORY.md", old_string: "a", new_string: "b" },
+        }],
+      },
+    });
+    const pathE = new PathEnforcer([], [], projectRoot);
+    const writeE = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    const result = checkStreamLine(line, pathE, null, null, ctx, writeE);
+    expect(result).not.toBeNull();
+    expect(result).toContain("Write blocked");
+  });
+
+  it("allows Read tool on write-blocked path", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          name: "Read",
+          input: { file_path: "/home/user/project/memory/MEMORY.md" },
+        }],
+      },
+    });
+    const pathE = new PathEnforcer([], [], projectRoot);
+    const writeE = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    expect(checkStreamLine(line, pathE, null, null, ctx, writeE)).toBeNull();
+  });
+
+  it("allows Write tool to non-blocked path when write-blocked paths are set", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          name: "Write",
+          input: { file_path: "/home/user/project/memory/learnings.md", content: "new learning" },
+        }],
+      },
+    });
+    const pathE = new PathEnforcer([], [], projectRoot);
+    const writeE = new WritePathEnforcer(["memory/MEMORY.md"], projectRoot);
+    expect(checkStreamLine(line, pathE, null, null, ctx, writeE)).toBeNull();
   });
 });

@@ -129,6 +129,7 @@ export class CronScheduler {
         message,
         agentId: job.agent,
         ephemeral: true,
+        metadata: job.privileged ? { privileged: true } : undefined,
       });
 
       switch (job.outputMode) {

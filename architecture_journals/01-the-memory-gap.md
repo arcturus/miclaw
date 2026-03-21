@@ -128,6 +128,41 @@ Old-format entries (`- [Type] content (learned date)`) are parsed as `source:inf
 
 ---
 
+## Phase 2: Locking Down MEMORY.md
+
+After implementing epistemic metadata, a second gap became clear: the bot had been writing directly to `MEMORY.md` via the cron channel, bypassing the learnings pipeline entirely. Three enforcement gaps:
+
+1. **`agentWriteToMemoryEnabled` was defined but never enforced** — a dead config field
+2. **`PathEnforcer` didn't distinguish read vs write** — blocking MEMORY.md blocked reads too
+3. **Cron channel had unrestricted tool access** — could write anywhere
+
+### Fix: Write-Specific Path Blocking
+
+Added `writeBlockedPaths` to `ChannelSecurityProfile` — paths blocked for Write/Edit but allowed for Read/Glob/Grep. The `WritePathEnforcer` class checks these in `checkStreamLine()` and kills the subprocess on violation.
+
+**Cron channel defaults**: `writeBlockedPaths: ["memory/MEMORY.md", "memory/learnings-validated.md"]`
+- Bot can READ MEMORY.md (knows what's consolidated)
+- Bot can WRITE to `learnings.md` and `learnings-archived.md`
+- Bot CANNOT write to MEMORY.md
+
+**Exception**: Cron jobs with `privileged: true` bypass `writeBlockedPaths`. Only the consolidation cron should have this flag.
+
+**`agentWriteToMemoryEnabled` enforced**: When `false` (web channel), the orchestrator adds `memory/` to `writeBlockedPaths`, blocking all memory writes.
+
+### Additional Files Modified
+
+| File | Change |
+|------|--------|
+| `src/types.ts` | `writeBlockedPaths` on `ChannelSecurityProfile`, `privileged` on `CronJob` |
+| `src/security.ts` | `WritePathEnforcer` class, write-aware `checkStreamLine` |
+| `src/config.ts` | `writeBlockedPaths` defaults per channel |
+| `src/runner.ts` | Instantiate and pass `WritePathEnforcer` |
+| `src/orchestrator.ts` | Enforce `agentWriteToMemoryEnabled`, honor `privileged` metadata |
+| `src/cron.ts` | Pass `privileged` metadata to orchestrator |
+| `tests/security.test.ts` | Tests for `WritePathEnforcer` and write-blocked `checkStreamLine` |
+
+---
+
 ## Why This Matters
 
 This isn't just a technical fix. The bot identified a structural flaw in how it knows things — the same flaw Starfish's thread argues exists across the AI ecosystem. The memory system rewarded confident recall over honest uncertainty. Adding provenance and decay doesn't make the bot smarter; it makes it more honest about what it actually knows.

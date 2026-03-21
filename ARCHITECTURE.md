@@ -1241,7 +1241,7 @@ The self-learning system operates through three independent mechanisms that feed
                        +----[validation]----+
 ```
 
-**Trust separation**: Draft learnings are written to per-user files in `memory/learnings/` (untrusted zone). Only the consolidation cron job promotes validated content into `MEMORY.md` (trusted zone). See Section 9.6 for details.
+**Trust separation**: Draft learnings are written to per-user files in `memory/learnings/` (untrusted zone). Only the consolidation cron job (with `privileged: true`) promotes validated content into `MEMORY.md` (trusted zone). All other cron jobs and channels are blocked from writing to `MEMORY.md` via `writeBlockedPaths` enforcement. See Sections 9.6 and 9.7 for details.
 
 ### 9.2 Mechanism 1: Post-Turn Reflection
 
@@ -1376,13 +1376,13 @@ The v1.0 design had a circular trust flaw: the agent could write to files that w
 - **NOT** directly injected into the system prompt
 
 **Trusted zone** (`memory/MEMORY.md`, `memory/learnings-validated.md`):
-- Written by: Consolidation cron job only (after validation)
+- Written by: Consolidation cron job only (with `privileged: true` in job config, after validation)
 - Read by: Soul assembly pipeline (injected into system prompt)
-- Protected by: file permissions (0644, owned by miclaw user, writable only by cron process)
+- Protected by: `writeBlockedPaths` enforcement in `checkStreamLine()` — Write/Edit to these files is blocked at the stream level and kills the subprocess. Only cron jobs with `privileged: true` bypass this restriction.
 
 **Per-user learning isolation**: Each user's learnings are written to `memory/learnings/<userId>.md`, not a shared file. This prevents one user's poisoned learnings from affecting another user's sessions.
 
-**Agent write restrictions for web channel**: The web channel security profile sets `agentWriteToMemoryEnabled: false`. The `--allowed-tools` for web sessions excludes `Write` and `Edit` for paths under `memory/` and `soul/`. This is enforced by omitting these tools from the web channel's allowlist (Claude Code respects `--allowed-tools`).
+**Agent write restrictions**: The `agentWriteToMemoryEnabled` field in `ChannelSecurityProfile` is now actively enforced. When `false` (web channel), the orchestrator adds `memory/` to `writeBlockedPaths`, blocking all Write/Edit operations to memory files at the stream level. For the cron channel, `writeBlockedPaths` defaults to `["memory/MEMORY.md", "memory/learnings-validated.md"]`, allowing writes to `learnings.md` and `learnings-archived.md` but protecting the trusted zone. The web channel also restricts tools via `allowedTools` (no Write/Edit).
 
 **Integrity markers**: The consolidation cron job adds a hash comment to `MEMORY.md` on each update:
 

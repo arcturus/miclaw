@@ -108,6 +108,8 @@ export interface CronJob {
   timezone?: string;
   allowedTools?: string[];
   permissionMode?: string;
+  /** When true, this job bypasses writeBlockedPaths (e.g., consolidation cron that writes MEMORY.md) */
+  privileged?: boolean;
 }
 
 export interface CronExecution {
@@ -173,6 +175,13 @@ export interface ChannelSecurityProfile {
    * Empty array = use default blocked paths (~/.ssh, ~/.aws, ~/.gnupg, ~/.config).
    */
   blockedPaths: string[];
+
+  /**
+   * Paths blocked specifically for Write/Edit tools but allowed for Read/Glob/Grep.
+   * Use this to protect files like MEMORY.md from agent writes while still allowing reads.
+   * Paths resolved relative to project root. Empty array = no write-specific blocks.
+   */
+  writeBlockedPaths: string[];
 
   /**
    * URL hostname patterns allowed for WebFetch/WebSearch.

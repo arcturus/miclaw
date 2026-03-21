@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import type { ClaudeRunnerOptions, ClaudeRunnerResult, ClaudeJsonOutput } from "./types.js";
 import { RunnerError } from "./types.js";
-import { PathEnforcer, UrlEnforcer, AuditLogger, checkStreamLine } from "./security.js";
+import { PathEnforcer, WritePathEnforcer, UrlEnforcer, AuditLogger, checkStreamLine } from "./security.js";
 import { getProjectRoot } from "./config.js";
 
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
@@ -198,6 +198,9 @@ export class ClaudeRunner {
     const pathEnforcer = profile
       ? new PathEnforcer(profile.allowedPaths, profile.blockedPaths, getProjectRoot())
       : null;
+    const writePathEnforcer = profile && profile.writeBlockedPaths?.length > 0
+      ? new WritePathEnforcer(profile.writeBlockedPaths, getProjectRoot())
+      : null;
     const urlEnforcer = profile && (profile.allowedUrls.length > 0 || profile.blockedUrls.length > 0)
       ? new UrlEnforcer(profile.allowedUrls, profile.blockedUrls)
       : null;
@@ -233,7 +236,7 @@ export class ClaudeRunner {
         stdout += text;
 
         // Real-time security: parse NDJSON lines as they stream in
-        if (pathEnforcer || urlEnforcer || auditLogger) {
+        if (pathEnforcer || urlEnforcer || auditLogger || writePathEnforcer) {
           lineBuf += text;
           let nlIdx: number;
           while ((nlIdx = lineBuf.indexOf("\n")) !== -1) {
@@ -241,7 +244,7 @@ export class ClaudeRunner {
             lineBuf = lineBuf.slice(nlIdx + 1);
             if (!line) continue;
 
-            const violation = checkStreamLine(line, pathEnforcer, urlEnforcer, auditLogger, ctx);
+            const violation = checkStreamLine(line, pathEnforcer, urlEnforcer, auditLogger, ctx, writePathEnforcer);
             if (violation) {
               console.warn(`[runner:${rid}] ✗ SECURITY VIOLATION: ${violation}`);
               killed = true;

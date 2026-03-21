@@ -78,6 +78,44 @@ export class PathEnforcer {
   }
 }
 
+// ─── Write Path Enforcer ──────────────────────────────────────
+
+/**
+ * Enforces write-specific path restrictions.
+ * These paths are blocked for Write/Edit tools but allowed for Read/Glob/Grep.
+ * Used to protect files like MEMORY.md from agent writes while allowing reads.
+ */
+export class WritePathEnforcer {
+  private blocked: string[];
+
+  constructor(writeBlockedPaths: string[], private projectRoot: string) {
+    this.blocked = writeBlockedPaths.map((p) => this.resolve(p));
+  }
+
+  /**
+   * Check if a write to this path is allowed.
+   * @returns null if allowed, or a violation reason string if blocked.
+   */
+  check(targetPath: string): string | null {
+    if (this.blocked.length === 0) return null;
+
+    const resolved = this.resolve(targetPath);
+    for (const blocked of this.blocked) {
+      if (resolved === blocked || resolved.startsWith(blocked + path.sep)) {
+        return `Write blocked: ${targetPath} (matches write-protected path ${blocked})`;
+      }
+    }
+    return null;
+  }
+
+  private resolve(p: string): string {
+    if (p.startsWith("~")) {
+      p = path.join(HOME, p.slice(1));
+    }
+    return path.isAbsolute(p) ? path.resolve(p) : path.resolve(this.projectRoot, p);
+  }
+}
+
 // ─── URL Enforcer ─────────────────────────────────────────────
 
 /**
@@ -220,6 +258,9 @@ const PATH_TOOLS: Record<string, string[]> = {
   Grep: ["path"],
 };
 
+/** Tools that modify files (subject to writeBlockedPaths) */
+const WRITE_TOOLS = new Set(["Write", "Edit"]);
+
 /** Known tools that operate on URLs */
 const URL_TOOLS: Record<string, string[]> = {
   WebFetch: ["url"],
@@ -280,6 +321,7 @@ export function checkStreamLine(
   urlEnforcer: UrlEnforcer | null,
   auditLogger: AuditLogger | null,
   context: { channelId: string; userId: string; agentId: string },
+  writePathEnforcer?: WritePathEnforcer | null,
 ): string | null {
   let event: any;
   try {
@@ -318,6 +360,26 @@ export function checkStreamLine(
       const paths = extractPathsFromToolInput(toolName, input);
       for (const p of paths) {
         const violation = pathEnforcer.check(p);
+        if (violation) {
+          auditLogger?.log({
+            timestamp: new Date().toISOString(),
+            channelId: context.channelId,
+            userId: context.userId,
+            agentId: context.agentId,
+            action: "violation",
+            tool: toolName,
+            detail: { path: p, reason: violation },
+          });
+          return violation;
+        }
+      }
+    }
+
+    // Check write-specific blocked paths (only for Write/Edit tools)
+    if (writePathEnforcer && WRITE_TOOLS.has(toolName)) {
+      const paths = extractPathsFromToolInput(toolName, input);
+      for (const p of paths) {
+        const violation = writePathEnforcer.check(p);
         if (violation) {
           auditLogger?.log({
             timestamp: new Date().toISOString(),

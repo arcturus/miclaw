@@ -87,6 +87,16 @@ export class Orchestrator {
     const agent = this.agents.get(agentId);
     const security = getSecurityProfile(input.channelId, this.config);
 
+    // Enforce agentWriteToMemoryEnabled: when false, block all writes to memory/
+    if (!security.agentWriteToMemoryEnabled) {
+      security.writeBlockedPaths = [...(security.writeBlockedPaths ?? []), "memory/"];
+    }
+
+    // Privileged cron jobs (e.g., consolidation) bypass writeBlockedPaths
+    if (input.metadata?.privileged && input.channelId === "cron") {
+      security.writeBlockedPaths = [];
+    }
+
     const msgPreview = input.message.slice(0, 100).replace(/\n/g, "\\n");
     console.log(`[msg:${mid}] ── incoming ──────────────────────────────`);
     console.log(`[msg:${mid}] channel=${input.channelId} user=${input.userId} agent=${agentId} ephemeral=${!!input.ephemeral}`);
