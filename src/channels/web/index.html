@@ -630,6 +630,11 @@
       ensureTodaySeparator();
       _origAddMessage(text, role, meta);
     };
+
+    // Load most recent history on page load, then scroll to bottom
+    loadHistory().then(() => {
+      messages.scrollTop = messages.scrollHeight;
+    });
   </script>
 </body>
 </html>
