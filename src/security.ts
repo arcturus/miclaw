@@ -14,6 +14,7 @@ export const DEFAULT_BLOCKED_PATHS = [
   path.join(HOME, ".aws"),
   path.join(HOME, ".gnupg"),
   path.join(HOME, ".config"),
+  path.join(HOME, ".claude"),
   "/etc/shadow",
 ];
 
