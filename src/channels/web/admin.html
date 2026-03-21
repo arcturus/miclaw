@@ -198,6 +198,57 @@
     .skill-card h4 { color: #fff; margin-bottom: 4px; }
     .skill-card .desc { color: var(--text2); margin-bottom: 8px; }
     .skill-tools { display: flex; gap: 4px; flex-wrap: wrap; }
+
+    /* ─── Audit detail modal ─── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 640px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--text2);
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal h3 { margin-bottom: 16px; color: #fff; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .modal-field pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .modal-field .value-inline { color: var(--text); font-size: 13px; }
+    #security-tbody tr { cursor: pointer; }
   </style>
 </head>
 <body>
@@ -744,14 +795,15 @@
         return;
       }
 
-      tbody.innerHTML = data.entries.map(e => {
+      _auditEntries = data.entries;
+      tbody.innerHTML = data.entries.map((e, i) => {
         const actionBadge = e.action === 'violation' ? 'badge-red'
           : e.action === 'tool_use' ? 'badge-blue'
           : e.action === 'request_start' ? 'badge-green'
           : 'badge-yellow';
         const detail = e.detail ? escHtml(JSON.stringify(e.detail)).slice(0, 120) : '—';
         const time = e.timestamp ? new Date(e.timestamp).toLocaleString() : '—';
-        return `<tr>
+        return `<tr onclick="showAuditDetail(${i})">
           <td style="white-space:nowrap;font-size:11px">${time}</td>
           <td><span class="badge ${actionBadge}">${escHtml(e.action)}</span></td>
           <td>${escHtml(e.channelId ?? '—')}</td>
@@ -795,8 +847,67 @@
       if (currentPanel === 'overview') loadOverview();
     }, 30000);
 
+    // ─── Audit Detail Modal ───
+    let _auditEntries = [];
+
+    function showAuditDetail(idx) {
+      const e = _auditEntries[idx];
+      if (!e) return;
+      const overlay = document.getElementById('audit-modal');
+      const actionBadge = e.action === 'violation' ? 'badge-red'
+        : e.action === 'tool_use' ? 'badge-blue'
+        : e.action === 'request_start' ? 'badge-green'
+        : 'badge-yellow';
+      document.getElementById('audit-modal-body').innerHTML = `
+        <div class="modal-field">
+          <div class="label">Timestamp</div>
+          <div class="value-inline">${e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</div>
+        </div>
+        <div class="modal-field">
+          <div class="label">Action</div>
+          <div class="value-inline"><span class="badge ${actionBadge}">${escHtml(e.action)}</span></div>
+        </div>
+        <div class="modal-field">
+          <div class="label">Channel</div>
+          <div class="value-inline">${escHtml(e.channelId ?? '—')}</div>
+        </div>
+        <div class="modal-field">
+          <div class="label">User</div>
+          <div class="value-inline">${escHtml(e.userId ?? '—')}</div>
+        </div>
+        <div class="modal-field">
+          <div class="label">Agent</div>
+          <div class="value-inline">${escHtml(e.agentId ?? '—')}</div>
+        </div>
+        ${e.tool ? `<div class="modal-field">
+          <div class="label">Tool</div>
+          <div class="value-inline"><span class="badge badge-blue">${escHtml(e.tool)}</span></div>
+        </div>` : ''}
+        <div class="modal-field">
+          <div class="label">Detail</div>
+          <pre>${e.detail ? escHtml(JSON.stringify(e.detail, null, 2)) : '—'}</pre>
+        </div>`;
+      overlay.classList.add('open');
+    }
+
+    function closeAuditModal() {
+      document.getElementById('audit-modal').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeAuditModal();
+    });
+
     // Initial load
     loadOverview();
   </script>
+
+  <div class="modal-overlay" id="audit-modal" onclick="if(event.target===this)closeAuditModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closeAuditModal()">&times;</button>
+      <h3>Audit Entry</h3>
+      <div id="audit-modal-body"></div>
+    </div>
+  </div>
 </body>
 </html>
