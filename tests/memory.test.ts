@@ -48,12 +48,12 @@ describe("MemoryManager", () => {
     expect(content).toContain("Hello world");
   });
 
-  it("appendJournal truncates long content", () => {
+  it("appendJournal preserves full content without truncation", () => {
     const longContent = "x".repeat(1000);
     mm.appendJournal({ role: "user", content: longContent });
     const today = new Date().toISOString().split("T")[0];
     const content = readFileSync(path.join(tempDir, "journals", `${today}.md`), "utf-8");
-    expect(content.length).toBeLessThan(600);
+    expect(content).toContain(longContent);
   });
 
   it("readLearnings returns empty string when no file", () => {

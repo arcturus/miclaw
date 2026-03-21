@@ -122,16 +122,16 @@ describe("CronScheduler", () => {
       expect(scheduler.getHistory("job-multi")).toHaveLength(3);
     });
 
-    it("caps history at maxHistoryPerJob", async () => {
+    it("preserves full history without capping", async () => {
       const job = makeJob({ id: "job-cap" });
       injectJob(scheduler, job);
 
-      const max = (scheduler as any).maxHistoryPerJob;
-      for (let i = 0; i < max + 5; i++) {
+      const runs = 10;
+      for (let i = 0; i < runs; i++) {
         await scheduler.runNow("job-cap");
       }
 
-      expect(scheduler.getHistory("job-cap")).toHaveLength(max);
+      expect(scheduler.getHistory("job-cap")).toHaveLength(runs);
     });
 
     it("getHistory without jobId returns all jobs sorted by startedAt desc", async () => {
@@ -162,7 +162,7 @@ describe("CronScheduler", () => {
       expect(scheduler.getHistory("job-copy")).toHaveLength(1);
     });
 
-    it("truncates resultPreview to 500 chars", async () => {
+    it("preserves full resultPreview without truncation", async () => {
       const longResult = "x".repeat(1000);
       orchestrator.handleMessage.mockResolvedValue({ result: longResult, durationMs: 10 });
 
@@ -171,7 +171,7 @@ describe("CronScheduler", () => {
       await scheduler.runNow("job-long");
 
       const history = scheduler.getHistory("job-long");
-      expect(history[0].resultPreview).toHaveLength(500);
+      expect(history[0].resultPreview).toHaveLength(1000);
     });
   });
 
