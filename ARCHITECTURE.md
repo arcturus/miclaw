@@ -265,8 +265,8 @@ src/index.ts            --> config.ts, orchestrator.ts,
         resume: session.claudeSessionId,
         appendSystemPrompt: <assembled prompt>
       })
-7. ClaudeRunner spawns subprocess:
-   claude -p --output-format json --append-system-prompt "..." "Hello"
+7. ClaudeRunner writes prompt to temp file, spawns subprocess:
+   claude -p --output-format json --append-system-prompt-file /tmp/miclaw-XXXX/prompt.txt "Hello"
 8. ClaudeRunner parses JSON stdout, extracts result and session_id
 9. Orchestrator receives { result: "Hi there!", sessionId: "abc-123" }
 10. Orchestrator updates session:
@@ -745,8 +745,8 @@ interface MiclawConfig {
 
   /**
    * How the soul prompt is injected:
-   * - "append": uses --append-system-prompt (preserves Claude Code tools)
-   * - "replace": uses --system-prompt (full control, no built-in tools)
+   * - "append": uses --append-system-prompt-file (preserves Claude Code tools)
+   * - "replace": uses --system-prompt-file (full control, no built-in tools)
    */
   promptMode: "append" | "replace";
 
@@ -848,11 +848,17 @@ All interactions with Claude happen via `child_process.spawn` (not `exec`, to av
 // Pseudocode for ClaudeRunner.run()
 const args: string[] = ["-p", "--output-format", "json"];
 
-// System prompt injection
+// System prompt injection — written to temp files to avoid E2BIG
+// (OS ARG_MAX limit on combined argv + envp, typically ~2MB on Linux)
+const tempFiles: string[] = [];
 if (opts.appendSystemPrompt) {
-  args.push("--append-system-prompt", opts.appendSystemPrompt);
+  const tf = writeTempFile(opts.appendSystemPrompt);
+  tempFiles.push(tf);
+  args.push("--append-system-prompt-file", tf);
 } else if (opts.systemPrompt) {
-  args.push("--system-prompt", opts.systemPrompt);
+  const tf = writeTempFile(opts.systemPrompt);
+  tempFiles.push(tf);
+  args.push("--system-prompt-file", tf);
 }
 
 // Session resumption
@@ -901,7 +907,7 @@ const proc = spawn("claude", args, {
 ```bash
 claude -p \
   --output-format json \
-  --append-system-prompt "## Soul\nYou are miclaw...\n\n## Memory\n..." \
+  --append-system-prompt-file /tmp/miclaw-XXXX/prompt.txt \
   --model sonnet \
   --allowed-tools "Bash(npm:*)" "Read" "Write" "WebSearch" \
   "Hello, who are you?"
@@ -913,7 +919,7 @@ claude -p \
 claude -p \
   --output-format json \
   --resume abc-123-def-456 \
-  --append-system-prompt "## Soul\nYou are miclaw...\n\n## Memory\n..." \
+  --append-system-prompt-file /tmp/miclaw-XXXX/prompt.txt \
   "Tell me more about that."
 ```
 
@@ -932,20 +938,22 @@ claude -p \
 ```bash
 claude -p \
   --output-format json \
-  --append-system-prompt "## Soul\n...\n\n## Memory\n...\n\n## Task Context\nThis is a scheduled cron job: daily-summary" \
+  --append-system-prompt-file /tmp/miclaw-XXXX/prompt.txt \
   --model sonnet \
   "Review my recent journal entries and provide a morning briefing summary."
 ```
 
-### 7.3 `--append-system-prompt` vs `--system-prompt`
+### 7.3 `--append-system-prompt-file` vs `--system-prompt-file`
 
 | Use case | Flag | Rationale |
 |----------|------|-----------|
-| User-facing messages | `--append-system-prompt` | Preserves Claude Code's built-in tool instructions (bash, read, write, edit, grep, glob, etc.) |
-| Learning reflection | `--system-prompt` | Tools are not needed; full prompt control gives cleaner extraction |
-| Isolated agent tasks | `--system-prompt` | When the agent should not have access to file system tools |
+| User-facing messages | `--append-system-prompt-file` | Preserves Claude Code's built-in tool instructions (bash, read, write, edit, grep, glob, etc.) |
+| Learning reflection | `--system-prompt-file` | Tools are not needed; full prompt control gives cleaner extraction |
+| Isolated agent tasks | `--system-prompt-file` | When the agent should not have access to file system tools |
 
-**Rule**: If the agent needs Claude Code's tools, use `--append-system-prompt`. If it's a pure text-in/text-out call, use `--system-prompt`.
+**Rule**: If the agent needs Claude Code's tools, use `--append-system-prompt-file`. If it's a pure text-in/text-out call, use `--system-prompt-file`.
+
+> **Why `-file` variants?** The assembled prompt (soul + memory + skills) can exceed 100KB. Passing it as a CLI argument hits the OS `ARG_MAX` limit (~2MB for argv + envp combined), causing `spawn E2BIG`. The `-file` variants pass a short file path on argv and let Claude Code read the content from disk. Temp files are cleaned up on process exit.
 
 <!-- Updated per review: P0 — document --resume + --append-system-prompt interaction risk -->
 ### 7.4 CRITICAL: `--resume` + `--append-system-prompt` Interaction
@@ -1195,7 +1203,7 @@ The full skill body is NOT included in the summary list. If the agent decides to
 
 ### 8.5 Size Limits and Truncation Strategy
 
-The `--append-system-prompt` value has a practical limit dictated by OS argument length limits (typically 2MB on Linux, 262144 bytes on macOS) and Claude's context window.
+The system prompt is written to a temp file and passed via `--append-system-prompt-file` / `--system-prompt-file`, so the OS `ARG_MAX` limit on argv does not constrain prompt size. The remaining practical limit is Claude's context window.
 
 **Truncation priority** (what gets cut first):
 
@@ -1206,8 +1214,6 @@ The `--append-system-prompt` value has a practical limit dictated by OS argument
 5. **Soul files**: Never truncated. If soul files alone exceed the limit, that is a configuration error.
 
 **Target maximum**: 100,000 characters for the assembled prompt. This leaves ample room in Claude's context window for the conversation and tool outputs.
-
-**Fallback for very large prompts**: If the assembled prompt exceeds the OS argument limit, write it to a temporary file and use `--append-system-prompt "$(cat /tmp/miclaw-prompt-<uuid>.md)"` — however, this still hits shell limits. The robust fallback is to pipe via stdin, but `claude -p` reads the user message from the positional argument, not stdin. If this becomes an issue, the prompt can be split: core soul in `--append-system-prompt` and memory context written to a file that the agent is instructed to read.
 
 ---
 
