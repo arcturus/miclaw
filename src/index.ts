@@ -4,6 +4,7 @@ import { loadConfig, resolvePath } from "./config.js";
 import { Orchestrator } from "./orchestrator.js";
 import { CLIChannel } from "./channels/cli.js";
 import { WebChannel } from "./channels/web.js";
+import { TelegramChannel } from "./channels/telegram.js";
 import { CronScheduler } from "./cron.js";
 import { readFileSync, existsSync } from "node:fs";
 import type { Channel, AgentConfig } from "./types.js";
@@ -74,6 +75,12 @@ async function main() {
     web.setOrchestrator(orchestrator);
     if (cronScheduler) web.setCronScheduler(cronScheduler);
     channels.set("web", web);
+  }
+
+  if (config.channels.telegram.enabled) {
+    const telegram = new TelegramChannel(config);
+    telegram.onMessage((input) => orchestrator.handleMessage(input));
+    channels.set("telegram", telegram);
   }
 
   // Start all channels

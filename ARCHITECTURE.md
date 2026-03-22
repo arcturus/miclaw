@@ -90,13 +90,13 @@ The primary threat is **untrusted input reaching an agent with host-level privil
 
 ```
                         CHANNELS                              CRON
-              +-----------+  +----------+               +-------------+
-              |  CLI REPL |  | Web HTTP |  (future)     |    Cron     |
-              | (stdin/   |  | (Express |  Telegram..   |  Scheduler  |
-              |  stdout)  |  |  :3456)  |               | (node-cron) |
-              +-----+-----+  +----+----+               +------+------+
-                    |              |                           |
-                    +---------+----+-------- ... ------+------+
+              +-----------+  +----------+  +-----------+  +-------------+
+              |  CLI REPL |  | Web HTTP |  | Telegram  |  |    Cron     |
+              | (stdin/   |  | (node:   |  | (long     |  |  Scheduler  |
+              |  stdout)  |  |  http)   |  |  polling) |  | (node-cron) |
+              +-----+-----+  +----+----+  +-----+-----+  +------+------+
+                    |              |              |               |
+                    +---------+----+--------------+--------+-----+
                               |                        |
                       +-------v--------+       +-------v--------+
                       |     Router     |       |   Cron Runner  |
@@ -169,6 +169,7 @@ Strict layered imports prevent circular dependencies. A module may only import f
 ```
 Layer 3 (Surface)       src/channels/cli.ts
                         src/channels/web.ts
+                        src/channels/telegram.ts
                         src/cron.ts
                         src/index.ts
                             |
@@ -212,11 +213,13 @@ src/orchestrator.ts     --> types.ts, config.ts, runner.ts, soul.ts,
 
 src/channels/cli.ts     --> types.ts, orchestrator.ts
 src/channels/web.ts     --> types.ts, config.ts, orchestrator.ts
+src/channels/telegram.ts --> types.ts, config.ts
 src/cron.ts             --> types.ts, config.ts, orchestrator.ts
 
 src/index.ts            --> config.ts, orchestrator.ts,
                             channels/cli.ts, channels/web.ts,
-                            cron.ts, agents/registry.ts
+                            channels/telegram.ts, cron.ts,
+                            agents/registry.ts
 ```
 
 ### Circular Dependency Prevention Rules
@@ -1715,6 +1718,78 @@ const securityHeaders = {
 
 ---
 
+## 11b. Telegram Channel Architecture
+
+### 11b.1 Design
+
+The Telegram channel uses `node-telegram-bot-api` in **long-polling mode** — no webhook infrastructure required, consistent with miclaw's zero-infra philosophy. The bot polls Telegram's servers for new messages and routes them through the orchestrator like any other channel.
+
+### 11b.2 Authentication
+
+Telegram uses a **chat ID allowlist** instead of API keys or tokens. When `allowedChatIds` is configured, only messages from listed chat IDs are processed. Unauthorized chats receive a rejection message that includes their chat ID (useful for self-setup).
+
+When `allowedChatIds` is empty or unset, all chats are accepted. This is suitable for private bots or development.
+
+### 11b.3 Message Flow
+
+```
+Telegram servers --> long poll --> TelegramChannel.on("message")
+                                       |
+                                  [allowedChatIds check]
+                                       |
+                                  [sendChatAction("typing")]
+                                       |
+                                  orchestrator.handleMessage({
+                                    channelId: "telegram",
+                                    userId: String(chatId),
+                                    message: text
+                                  })
+                                       |
+                                  [split if > 4096 chars]
+                                       |
+                                  bot.sendMessage(chatId, result)
+```
+
+### 11b.4 Message Splitting
+
+Telegram enforces a 4096 character limit per message. The `sendLongMessage()` helper splits longer responses into sequential chunks. Splitting is done at character boundaries for simplicity.
+
+### 11b.5 Broadcast
+
+`send(userId, message)` delivers a message to a specific chat ID. `send("*", message)` broadcasts to all **known chat IDs** — chat IDs seen during the current process lifetime (tracked in an in-memory `Set`). This is consistent with how `WebChannel` tracks SSE clients in memory.
+
+### 11b.6 Security Profile
+
+The default security profile mirrors the web channel (external, untrusted users):
+
+| Setting | Value |
+|---------|-------|
+| `allowedTools` | Read, Glob, Grep, WebSearch, WebFetch |
+| `permissionMode` | bypassPermissions |
+| `rateLimitPerMinute` | 30 |
+| `maxMessageLength` | 50,000 |
+| `maxTimeoutMs` | 120,000 |
+| `agentWriteToMemoryEnabled` | false |
+| `auditEnabled` | true |
+
+### 11b.7 Configuration
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "allowedChatIds": ["123456789"]
+    }
+  }
+}
+```
+
+The `token` field supports `${ENV_VAR}` syntax via `resolveEnvVars()`. The bot token should never be committed to version control.
+
+---
+
 ## 12. Error Handling Strategy
 
 ### 12.1 Error Propagation Layers
@@ -1915,6 +1990,7 @@ miclaw/
 │   │   ├── types.ts              # Channel interface and MessageHandler type
 │   │   ├── cli.ts                # CLIChannel: node:readline REPL
 │   │   ├── web.ts                # WebChannel: node:http server + API routes
+│   │   ├── telegram.ts           # TelegramChannel: long-polling bot
 │   │   └── web/
 │   │       └── index.html        # Chat UI: single-file, no build step
 │   │
@@ -1974,63 +2050,32 @@ miclaw/
 
 ### 14.1 Adding a New Channel
 
-1. Create `src/channels/<name>.ts`.
-2. Implement the `Channel` interface:
+The `TelegramChannel` (`src/channels/telegram.ts`) is a complete reference implementation. The pattern is:
+
+1. Create `src/channels/<name>.ts` implementing the `Channel` interface.
+2. Add channel config to `MiclawConfig.channels` in `src/config.ts` (type, defaults, env var resolution).
+3. Add a default security profile in `getSecurityProfile()` in `src/config.ts`.
+4. Register in `src/index.ts`:
 
 ```typescript
-import { Channel, MessageHandler } from "./types";
-
-export class TelegramChannel implements Channel {
-  readonly name = "telegram";
-  private handler: MessageHandler | null = null;
-
-  constructor(private config: { botToken: string }) {}
-
-  async start(): Promise<void> {
-    // Initialize Telegram bot, register webhook or polling
-    // On each incoming message:
-    //   const result = await this.handler!({
-    //     channelId: this.name,
-    //     userId: msg.from.id.toString(),
-    //     message: msg.text,
-    //   });
-    //   await this.sendTelegramMessage(msg.chat.id, result.result);
-  }
-
-  async stop(): Promise<void> {
-    // Close bot connection
-  }
-
-  onMessage(handler: MessageHandler): void {
-    this.handler = handler;
-  }
-
-  async send(userId: string, message: string): Promise<boolean> {
-    // Send message to Telegram user by ID
-    return true;
-  }
+if (config.channels.<name>.enabled) {
+  const channel = new MyChannel(config);
+  channel.onMessage((input) => orchestrator.handleMessage(input));
+  channels.set("<name>", channel);
 }
 ```
 
-3. Register in `src/index.ts`:
-
-```typescript
-if (config.channels.telegram?.enabled) {
-  const telegram = new TelegramChannel(config.channels.telegram);
-  telegram.onMessage((input) => orchestrator.handleMessage(input));
-  channels.push(telegram);
-}
-```
-
-4. Add configuration to `miclaw.json`:
+5. Add configuration to `miclaw.json`:
 
 ```json
 {
   "channels": {
-    "telegram": { "enabled": true, "botToken": "${TELEGRAM_BOT_TOKEN}" }
+    "<name>": { "enabled": true, ... }
   }
 }
 ```
+
+See `src/channels/telegram.ts` for a full working example including message splitting, chat ID allowlisting, typing indicators, and wildcard broadcast.
 
 ### 14.2 Adding a New Skill
 
