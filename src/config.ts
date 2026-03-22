@@ -211,7 +211,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
       permissionMode: "bypassPermissions",
       maxMessageLength: 50_000,
-      maxTimeoutMs: 120_000,
+      maxTimeoutMs: config.defaultTimeoutMs,
       requireAuth: false,
       learningEnabled: config.learning.enabled,
       agentWriteToMemoryEnabled: false,
