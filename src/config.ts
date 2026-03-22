@@ -33,8 +33,10 @@ export interface MiclawConfig {
       corsOrigins?: string[];
       staticDir?: string;
       auth: {
-        type: "none" | "api-key";
+        type: "none" | "api-key" | "basic";
         apiKey?: string;
+        username?: string;
+        password?: string;
       };
       security?: Partial<ChannelSecurityProfile>;
     };
@@ -147,9 +149,15 @@ export function loadConfig(configPath?: string): MiclawConfig {
 
   const config = deepMerge(DEFAULTS, userConfig) as MiclawConfig;
 
-  // Resolve env var references in auth apiKey
+  // Resolve env var references in auth fields
   if (config.channels.web.auth.apiKey) {
     config.channels.web.auth.apiKey = resolveEnvVars(config.channels.web.auth.apiKey);
+  }
+  if (config.channels.web.auth.username) {
+    config.channels.web.auth.username = resolveEnvVars(config.channels.web.auth.username);
+  }
+  if (config.channels.web.auth.password) {
+    config.channels.web.auth.password = resolveEnvVars(config.channels.web.auth.password);
   }
 
   // Resolve env var references in telegram token

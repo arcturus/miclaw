@@ -526,3 +526,144 @@ describe("WebChannel with API key auth", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("WebChannel with basic auth", () => {
+  let port: number;
+  let channel: WebChannel;
+
+  beforeAll(async () => {
+    port = await getPort();
+    const config = {
+      channels: {
+        web: {
+          enabled: true,
+          port,
+          host: "127.0.0.1",
+          auth: { type: "basic" as const, username: "admin", password: "secret123" },
+        },
+      },
+    } as MiclawConfig;
+    channel = new WebChannel(config);
+    channel.onMessage(async (input) => ({
+      result: `echo: ${input.message}`,
+      sessionId: "test-session",
+      durationMs: 1,
+    }));
+    await channel.start();
+  });
+
+  afterAll(async () => {
+    await channel.stop();
+  });
+
+  function basicAuth(user: string, pass: string): string {
+    return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+  }
+
+  it("rejects GET / without credentials", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/`);
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects GET /admin without credentials", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/admin`);
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects POST /api/chat without credentials", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message: "hello" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects wrong password", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message: "hello" }),
+      headers: { Authorization: basicAuth("admin", "wrong") },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects wrong username", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message: "hello" }),
+      headers: { Authorization: basicAuth("hacker", "secret123") },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts correct credentials for POST /api/chat", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message: "hello" }),
+      headers: { Authorization: basicAuth("admin", "secret123") },
+    });
+    expect(res.status).toBe(200);
+    expect(res.json().result).toBe("echo: hello");
+  });
+
+  it("accepts correct credentials for GET /api/health", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      headers: { Authorization: basicAuth("admin", "secret123") },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("defaults username to 'admin' when not configured", async () => {
+    const p = await getPort();
+    const cfg = {
+      channels: {
+        web: {
+          enabled: true,
+          port: p,
+          host: "127.0.0.1",
+          auth: { type: "basic" as const, password: "pass" },
+        },
+      },
+    } as MiclawConfig;
+    const ch = new WebChannel(cfg);
+    ch.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await ch.start();
+
+    const res = await fetch(`http://127.0.0.1:${p}/api/health`, {
+      headers: { Authorization: basicAuth("admin", "pass") },
+    });
+    expect(res.status).toBe(200);
+    await ch.stop();
+  });
+
+  it("returns WWW-Authenticate header on 401", async () => {
+    const raw = await new Promise<http.IncomingMessage>((resolve) => {
+      http.get(`http://127.0.0.1:${port}/`, resolve);
+    });
+    expect(raw.statusCode).toBe(401);
+    expect(raw.headers["www-authenticate"]).toBe('Basic realm="miclaw"');
+  });
+
+  it("rejects basic auth with no password configured", async () => {
+    const p = await getPort();
+    const cfg = {
+      channels: {
+        web: {
+          enabled: true,
+          port: p,
+          host: "127.0.0.1",
+          auth: { type: "basic" as const },
+        },
+      },
+    } as MiclawConfig;
+    const ch = new WebChannel(cfg);
+    ch.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await ch.start();
+
+    const res = await fetch(`http://127.0.0.1:${p}/api/health`, {
+      headers: { Authorization: basicAuth("admin", "anything") },
+    });
+    expect(res.status).toBe(500);
+    await ch.stop();
+  });
+});

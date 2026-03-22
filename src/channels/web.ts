@@ -133,6 +133,11 @@ export class WebChannel implements Channel {
   private async route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
+    // Basic auth protects all routes (including static pages)
+    if (this.config.channels.web.auth.type === "basic") {
+      if (!this.authenticateBasic(req, res)) return;
+    }
+
     // Chat UI
     if (req.method === "GET" && url.pathname === "/") {
       return this.serveFile(res, "web/index.html", "text/html");
@@ -188,7 +193,11 @@ export class WebChannel implements Channel {
     const authConfig = this.config.channels.web.auth;
     if (authConfig.type === "none") return true;
 
-    // Reject if no API key is configured (prevents empty-string bypass)
+    if (authConfig.type === "basic") {
+      return this.authenticateBasic(req, res);
+    }
+
+    // api-key auth: Reject if no API key is configured (prevents empty-string bypass)
     if (!authConfig.apiKey) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Server misconfigured: no API key set" }));
@@ -221,10 +230,81 @@ export class WebChannel implements Channel {
     return true;
   }
 
+  /** Authenticate via HTTP Basic Auth — prompts the browser's native login dialog */
+  private authenticateBasic(req: IncomingMessage, res: ServerResponse): boolean {
+    const authConfig = this.config.channels.web.auth;
+
+    if (!authConfig.password) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Server misconfigured: no password set" }));
+      return false;
+    }
+
+    const header = req.headers.authorization;
+    if (!header?.startsWith("Basic ")) {
+      res.writeHead(401, {
+        "WWW-Authenticate": 'Basic realm="miclaw"',
+        "Content-Type": "text/plain",
+      });
+      res.end("Authentication required");
+      return false;
+    }
+
+    let decoded: string;
+    try {
+      decoded = Buffer.from(header.slice(6), "base64").toString("utf-8");
+    } catch {
+      res.writeHead(401, {
+        "WWW-Authenticate": 'Basic realm="miclaw"',
+        "Content-Type": "text/plain",
+      });
+      res.end("Invalid credentials");
+      return false;
+    }
+
+    const separatorIndex = decoded.indexOf(":");
+    if (separatorIndex === -1) {
+      res.writeHead(401, {
+        "WWW-Authenticate": 'Basic realm="miclaw"',
+        "Content-Type": "text/plain",
+      });
+      res.end("Invalid credentials");
+      return false;
+    }
+
+    const username = decoded.slice(0, separatorIndex);
+    const password = decoded.slice(separatorIndex + 1);
+
+    // Timing-safe comparison for both username and password
+    const expectedUser = Buffer.from(authConfig.username ?? "admin", "utf-8");
+    const receivedUser = Buffer.from(username, "utf-8");
+    const expectedPass = Buffer.from(authConfig.password, "utf-8");
+    const receivedPass = Buffer.from(password, "utf-8");
+
+    const userMatch = expectedUser.length === receivedUser.length && timingSafeEqual(expectedUser, receivedUser);
+    const passMatch = expectedPass.length === receivedPass.length && timingSafeEqual(expectedPass, receivedPass);
+
+    if (!userMatch || !passMatch) {
+      res.writeHead(401, {
+        "WWW-Authenticate": 'Basic realm="miclaw"',
+        "Content-Type": "text/plain",
+      });
+      res.end("Invalid credentials");
+      return false;
+    }
+
+    return true;
+  }
+
   /** Authenticate SSE requests — accepts token via query param since EventSource can't send headers */
   private authenticateSSE(req: IncomingMessage, res: ServerResponse): boolean {
     const authConfig = this.config.channels.web.auth;
     if (authConfig.type === "none") return true;
+
+    // Basic auth works natively with EventSource (browser sends credentials automatically)
+    if (authConfig.type === "basic") {
+      return this.authenticateBasic(req, res);
+    }
 
     if (!authConfig.apiKey) {
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -672,6 +752,8 @@ export class WebChannel implements Channel {
           auth: {
             type: config.channels.web.auth.type,
             apiKey: config.channels.web.auth.apiKey ? "***" : undefined,
+            username: config.channels.web.auth.username,
+            password: config.channels.web.auth.password ? "***" : undefined,
           },
         },
       },
