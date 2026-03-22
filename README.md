@@ -21,7 +21,7 @@ No magic. No hidden state. If you want to understand how an agent framework work
 ![miclaw architecture diagram](miclaw-architecture.png)
 
 ```
-Layer 3 (Surface)       CLI channel, Web channel, Telegram channel, Cron scheduler, Entry point
+Layer 3 (Surface)       CLI channel, Web channel, Telegram channel, Cron scheduler, Tunnel, Entry point
     |
 Layer 2 (Coordination)  Orchestrator, SessionManager, Learner
     |
@@ -258,6 +258,92 @@ Eight layers, each independently configurable per channel:
 
 By default, agents can only read and write within the project directory. Sensitive paths like `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, and `/etc/shadow` are blocked even if you widen access. These defaults are set in `src/config.ts` and can be overridden per-channel via the `security` section in `miclaw.json`. See [SECURITY.md](SECURITY.md) for the full threat model, configuration options, and deployment guidance.
 
+### Cloudflare Tunnel
+
+miclaw can expose the web channel to the internet via [Cloudflare Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), so you can access your agent from anywhere without port forwarding, static IPs, or firewall rules.
+
+You need `cloudflared` installed on the host (or use the Docker image, which includes it).
+
+**Quick tunnel** — the simplest option. No Cloudflare account needed. You get a random `https://xyz.trycloudflare.com` URL that changes on every restart:
+
+```json
+{
+  "tunnel": {
+    "enabled": true,
+    "mode": "quick"
+  }
+}
+```
+
+Start miclaw and the tunnel URL will be printed to the console:
+
+```
+[tunnel] Starting cloudflared quick tunnel → http://127.0.0.1:3456
+[tunnel] Tunnel active: https://random-words-here.trycloudflare.com
+[tunnel] Public URL: https://random-words-here.trycloudflare.com
+```
+
+**Named tunnel** — persistent hostname that survives restarts. Requires a Cloudflare account and a domain managed by Cloudflare.
+
+First, set up the tunnel with `cloudflared`:
+
+```bash
+# Authenticate with Cloudflare (opens browser)
+cloudflared tunnel login
+
+# Create a tunnel
+cloudflared tunnel create miclaw
+
+# Route DNS — point your subdomain to the tunnel
+cloudflared tunnel route dns miclaw miclaw.example.com
+```
+
+Then configure miclaw to use it:
+
+```json
+{
+  "tunnel": {
+    "enabled": true,
+    "mode": "named",
+    "tunnelName": "miclaw",
+    "hostname": "miclaw.example.com",
+    "credentialsFile": "/home/you/.cloudflared/<tunnel-id>.json"
+  }
+}
+```
+
+All tunnel config values support environment variable substitution (`${VAR_NAME}`), so you can keep credentials out of the config file:
+
+```json
+{
+  "tunnel": {
+    "enabled": true,
+    "mode": "named",
+    "tunnelName": "${CF_TUNNEL_NAME}",
+    "hostname": "${CF_TUNNEL_HOSTNAME}",
+    "credentialsFile": "${CF_TUNNEL_CREDENTIALS}"
+  }
+}
+```
+
+The full set of tunnel options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable/disable the tunnel |
+| `mode` | `"quick"` | `"quick"` for ephemeral URL, `"named"` for persistent hostname |
+| `tunnelName` | — | Name of the tunnel (named mode only) |
+| `hostname` | — | Public hostname (named mode only) |
+| `credentialsFile` | — | Path to tunnel credentials JSON (named mode only) |
+| `protocol` | `"http"` | Protocol for the local origin (`"http"` or `"https"`) |
+| `port` | web channel port | Local port to tunnel (defaults to `channels.web.port`) |
+| `host` | web channel host | Local host to tunnel (defaults to `channels.web.host`) |
+| `extraArgs` | `[]` | Additional arguments passed to `cloudflared` |
+
+If the tunnel fails to start (e.g. `cloudflared` not installed), miclaw logs a warning and continues — the web channel remains accessible locally.
+
+**Security note:** Exposing miclaw to the internet means untrusted users can interact with your agent. Make sure you have appropriate security settings: enable API key auth on the web channel, review your tool allowlists, and configure rate limits. See [SECURITY.md](SECURITY.md) for guidance.
+
 ## Configuration
 
 Everything lives in `miclaw.json`:
@@ -283,7 +369,8 @@ Everything lives in `miclaw.json`:
     "enabled": true,
     "model": "haiku",
     "afterEveryTurn": false
-  }
+  },
+  "tunnel": { "enabled": false, "mode": "quick" }
 }
 ```
 
@@ -303,6 +390,7 @@ src/
   learner.ts        Post-turn reflection via haiku
   cron.ts           Scheduled job execution with template variables
   security.ts       PathEnforcer, UrlEnforcer, RateLimiter, AuditLogger
+  tunnel.ts         Cloudflare Tunnel management (cloudflared subprocess)
   config.ts         Config loading, defaults, security profiles
   types.ts          All type definitions and error classes
   channels/
