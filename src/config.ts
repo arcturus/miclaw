@@ -15,6 +15,7 @@ export interface MiclawConfig {
   promptMode: "append" | "replace";
   mcpConfig: string | null;
   permissionMode: string;
+  defaultTimeoutMs: number;
   maxConcurrentProcesses: number;
   maxQueueDepth: number;
   maxTurnsPerSession: number;
@@ -63,6 +64,7 @@ const DEFAULTS: MiclawConfig = {
   promptMode: "append",
   mcpConfig: null,
   permissionMode: "default",
+  defaultTimeoutMs: 300_000,
   maxConcurrentProcesses: 5,
   maxQueueDepth: 20,
   maxTurnsPerSession: 20,
@@ -158,7 +160,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       allowedTools: [],
       permissionMode: config.permissionMode,
       maxMessageLength: 200_000,
-      maxTimeoutMs: 300_000,
+      maxTimeoutMs: config.defaultTimeoutMs,
       requireAuth: false,
       learningEnabled: config.learning.enabled,
       agentWriteToMemoryEnabled: true,
@@ -177,7 +179,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
       permissionMode: "bypassPermissions",
       maxMessageLength: 50_000,
-      maxTimeoutMs: 120_000,
+      maxTimeoutMs: config.defaultTimeoutMs,
       requireAuth: config.channels.web.auth.type !== "none",
       learningEnabled: config.learning.enabled,
       agentWriteToMemoryEnabled: false,
@@ -195,7 +197,7 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       allowedTools: [],
       permissionMode: "bypassPermissions",
       maxMessageLength: 200_000,
-      maxTimeoutMs: 600_000,
+      maxTimeoutMs: config.defaultTimeoutMs * 2,
       requireAuth: false,
       learningEnabled: false,
       agentWriteToMemoryEnabled: true,
