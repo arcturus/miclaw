@@ -53,5 +53,9 @@
     "afterEveryTurn": false,
     "consolidationCron": "0 2 * * *",
     "maxLearningEntries": 200
+  },
+  "tunnel": {
+    "enabled": false,
+    "mode": "quick"
   }
 }

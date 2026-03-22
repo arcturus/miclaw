@@ -3,6 +3,13 @@ FROM node:22-slim
 # Claude Code CLI (required runtime dependency)
 RUN npm install -g @anthropic-ai/claude-code
 
+# cloudflared (optional — enables Cloudflare Tunnel support)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb && \
+    dpkg -i /tmp/cloudflared.deb && \
+    rm /tmp/cloudflared.deb && \
+    apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install dependencies
