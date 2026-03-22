@@ -21,7 +21,7 @@ No magic. No hidden state. If you want to understand how an agent framework work
 ![miclaw architecture diagram](miclaw-architecture.png)
 
 ```
-Layer 3 (Surface)       CLI channel, Web channel, Cron scheduler, Entry point
+Layer 3 (Surface)       CLI channel, Web channel, Telegram channel, Cron scheduler, Entry point
     |
 Layer 2 (Coordination)  Orchestrator, SessionManager, Learner
     |
@@ -205,10 +205,11 @@ Under the hood, this maps to Claude Code's `--resume` flag.
 
 ### Channels
 
-Two built-in delivery channels:
+Three built-in delivery channels:
 
 - **CLI** — interactive readline REPL. Trusted. No rate limits. Full tool access.
 - **Web** — HTTP server with a chat UI and admin dashboard. Untrusted. Restricted tools, rate limited, audit logged.
+- **Telegram** — long-polling bot via `node-telegram-bot-api`. Untrusted. Restricted tools, rate limited, chat ID allowlisting.
 
 The `Channel` interface is four methods:
 
@@ -274,7 +275,8 @@ Everything lives in `miclaw.json`:
   "sessionTtlDays": 30,
   "channels": {
     "cli": { "enabled": true, "prompt": "you> " },
-    "web": { "enabled": true, "port": 3456, "host": "127.0.0.1" }
+    "web": { "enabled": true, "port": 3456, "host": "127.0.0.1" },
+    "telegram": { "enabled": false }
   },
   "cron": { "enabled": true, "jobsFile": "./cron/jobs.json" },
   "learning": {
@@ -306,6 +308,7 @@ src/
   channels/
     cli.ts          Interactive readline REPL
     web.ts          HTTP server, chat UI, admin dashboard, SSE streaming
+    telegram.ts     Telegram bot via long polling
 soul/               Default agent personality files
 skills/             Skill definitions (markdown + YAML frontmatter)
 memory/             Long-term memory and journals

@@ -38,6 +38,12 @@ export interface MiclawConfig {
       };
       security?: Partial<ChannelSecurityProfile>;
     };
+    telegram: {
+      enabled: boolean;
+      token?: string;
+      allowedChatIds?: string[];
+      security?: Partial<ChannelSecurityProfile>;
+    };
   };
   cron: {
     enabled: boolean;
@@ -76,6 +82,9 @@ const DEFAULTS: MiclawConfig = {
       port: 3456,
       host: "127.0.0.1",
       auth: { type: "none" },
+    },
+    telegram: {
+      enabled: false,
     },
   },
   cron: {
@@ -143,6 +152,11 @@ export function loadConfig(configPath?: string): MiclawConfig {
     config.channels.web.auth.apiKey = resolveEnvVars(config.channels.web.auth.apiKey);
   }
 
+  // Resolve env var references in telegram token
+  if (config.channels.telegram.token) {
+    config.channels.telegram.token = resolveEnvVars(config.channels.telegram.token);
+  }
+
   return config;
 }
 
@@ -190,6 +204,23 @@ export function getSecurityProfile(channelName: string, config: MiclawConfig): C
       blockedUrls: [],
       maxCostPerRequest: 0,   // 0 = unlimited (configure per deployment)
       rateLimitPerMinute: 60, // 60 req/min per user
+      auditEnabled: true,
+    },
+    telegram: {
+      // Telegram: external users, restrictive like web
+      allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
+      permissionMode: "bypassPermissions",
+      maxMessageLength: 50_000,
+      maxTimeoutMs: 120_000,
+      requireAuth: false,
+      learningEnabled: config.learning.enabled,
+      agentWriteToMemoryEnabled: false,
+      allowedPaths: [],
+      blockedPaths: [],
+      allowedUrls: [],
+      blockedUrls: [],
+      maxCostPerRequest: 0,
+      rateLimitPerMinute: 30,
       auditEnabled: true,
     },
     cron: {
