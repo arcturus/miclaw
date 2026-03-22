@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import type { ChannelSecurityProfile } from "./types.js";
 import { ConfigError } from "./types.js";
+import type { TunnelConfig } from "./tunnel.js";
 
 export interface MiclawConfig {
   defaultAgent: string;
@@ -57,6 +58,7 @@ export interface MiclawConfig {
     consolidationCron: string;
     maxLearningEntries: number;
   };
+  tunnel: TunnelConfig;
 }
 
 const DEFAULTS: MiclawConfig = {
@@ -97,6 +99,10 @@ const DEFAULTS: MiclawConfig = {
     afterEveryTurn: false,
     consolidationCron: "0 2 * * *",
     maxLearningEntries: 200,
+  },
+  tunnel: {
+    enabled: false,
+    mode: "quick",
   },
 };
 
@@ -155,6 +161,17 @@ export function loadConfig(configPath?: string): MiclawConfig {
   // Resolve env var references in telegram token
   if (config.channels.telegram.token) {
     config.channels.telegram.token = resolveEnvVars(config.channels.telegram.token);
+  }
+
+  // Resolve env var references in tunnel config
+  if (config.tunnel.credentialsFile) {
+    config.tunnel.credentialsFile = resolveEnvVars(config.tunnel.credentialsFile);
+  }
+  if (config.tunnel.hostname) {
+    config.tunnel.hostname = resolveEnvVars(config.tunnel.hostname);
+  }
+  if (config.tunnel.tunnelName) {
+    config.tunnel.tunnelName = resolveEnvVars(config.tunnel.tunnelName);
   }
 
   return config;

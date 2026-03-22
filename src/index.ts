@@ -6,6 +6,7 @@ import { CLIChannel } from "./channels/cli.js";
 import { WebChannel } from "./channels/web.js";
 import { TelegramChannel } from "./channels/telegram.js";
 import { CronScheduler } from "./cron.js";
+import { CloudflareTunnel } from "./tunnel.js";
 import { readFileSync, existsSync } from "node:fs";
 import type { Channel, AgentConfig } from "./types.js";
 
@@ -89,9 +90,28 @@ async function main() {
     console.log(`[${name}] Channel started`);
   }
 
+  // Start Cloudflare Tunnel if enabled
+  let tunnel: CloudflareTunnel | null = null;
+  if (config.tunnel.enabled && config.channels.web.enabled) {
+    tunnel = new CloudflareTunnel(
+      config.tunnel,
+      config.channels.web.port,
+      config.channels.web.host,
+    );
+    try {
+      const info = await tunnel.start();
+      console.log(`[tunnel] Public URL: ${info.url}`);
+    } catch (err) {
+      console.error(`[tunnel] Failed to start: ${err}`);
+      console.warn("[tunnel] Continuing without tunnel — web channel is still accessible locally");
+      tunnel = null;
+    }
+  }
+
   // Graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down...");
+    await tunnel?.stop();
     cronScheduler?.stop();
     for (const [name, channel] of channels) {
       await channel.stop();

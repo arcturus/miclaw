@@ -446,7 +446,7 @@ describe("checkStreamLine", () => {
     const enforcer = new PathEnforcer([], [], projectRoot);
     checkStreamLine(line, enforcer, null, logger, ctx);
 
-    const entries = readFileSync(logPath, "utf-8").trim().split("\n").map(JSON.parse);
+    const entries = readFileSync(logPath, "utf-8").trim().split("\n").map((line: string) => JSON.parse(line));
     expect(entries).toHaveLength(1);
     expect(entries[0].action).toBe("tool_use");
     expect(entries[0].tool).toBe("Read");
@@ -474,7 +474,7 @@ describe("checkStreamLine", () => {
     const enforcer = new PathEnforcer([], [], projectRoot);
     checkStreamLine(line, enforcer, null, logger, ctx);
 
-    const entries = readFileSync(logPath, "utf-8").trim().split("\n").map(JSON.parse);
+    const entries = readFileSync(logPath, "utf-8").trim().split("\n").map((line: string) => JSON.parse(line));
     // Should have both tool_use and violation entries
     expect(entries).toHaveLength(2);
     expect(entries[0].action).toBe("tool_use");

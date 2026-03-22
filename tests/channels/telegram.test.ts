@@ -298,7 +298,7 @@ describe("TelegramChannel long messages", () => {
 
     // Should be split into 2 chunks: 4096 + 904
     const sendCalls = mockBot.sendMessage.mock.calls;
-    const responseCalls = sendCalls.filter(([id]: [string]) => id === "12345");
+    const responseCalls = sendCalls.filter((call: any[]) => call[0] === "12345");
     expect(responseCalls.length).toBe(2);
     expect(responseCalls[0][1].length).toBe(4096);
     expect(responseCalls[1][1].length).toBe(904);
