@@ -18,6 +18,8 @@ No magic. No hidden state. If you want to understand how an agent framework work
 
 ## Architecture
 
+![miclaw architecture diagram](miclaw-architecture.png)
+
 ```
 Layer 3 (Surface)       CLI channel, Web channel, Cron scheduler, Entry point
     |
