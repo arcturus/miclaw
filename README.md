@@ -241,6 +241,14 @@ Scheduled autonomous tasks via `cron/jobs.json`:
 
 Template variables (`{{DATE}}`, `{{JOURNALS_LAST_N}}`) get resolved at execution time.
 
+**Built-in jobs.** Some jobs are auto-registered by miclaw based on config, rather than defined in `jobs.json`. These run alongside your user-defined jobs:
+
+| Job | Condition | Schedule source | Purpose |
+|-----|-----------|-----------------|---------|
+| `learning-consolidation` | `learning.enabled: true` | `learning.consolidationCron` | Deduplicates learnings, promotes high-confidence entries to MEMORY.md, prunes stale ones |
+
+If you define a job in `jobs.json` with the same `id` as a built-in, yours takes precedence — the built-in is skipped. This lets you override the consolidation prompt or schedule without touching code.
+
 ### Security
 
 Eight layers, each independently configurable per channel:
