@@ -2,6 +2,9 @@
 // Uses --output-format stream-json (NDJSON) to capture ALL assistant text,
 // including text between tool calls that --output-format json drops.
 import { spawn } from "node:child_process";
+import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { ClaudeRunnerOptions, ClaudeRunnerResult, ClaudeJsonOutput } from "./types.js";
 import { RunnerError } from "./types.js";
 import { PathEnforcer, UrlEnforcer, AuditLogger, checkStreamLine } from "./security.js";
@@ -14,7 +17,7 @@ let runSeq = 0;
 function redact(args: string[]): string[] {
   return args.map((a, i) => {
     const prev = args[i - 1];
-    if (prev === "--system-prompt" || prev === "--append-system-prompt") {
+    if (prev === "--system-prompt" || prev === "--append-system-prompt" || prev === "--system-prompt-file" || prev === "--append-system-prompt-file") {
       return `<${a.length} chars>`;
     }
     if (i === args.length - 1 && a.length > 200) {
@@ -144,11 +147,18 @@ export class ClaudeRunner {
     const startTime = Date.now();
     const args: string[] = ["-p", "--output-format", "stream-json", "--verbose"];
 
-    // System prompt injection
+    // System prompt injection — use temp files to avoid E2BIG on large prompts
+    const tempFiles: string[] = [];
     if (opts.appendSystemPrompt) {
-      args.push("--append-system-prompt", opts.appendSystemPrompt);
+      const tf = join(mkdtempSync(join(tmpdir(), "miclaw-")), "prompt.txt");
+      writeFileSync(tf, opts.appendSystemPrompt);
+      tempFiles.push(tf);
+      args.push("--append-system-prompt-file", tf);
     } else if (opts.systemPrompt) {
-      args.push("--system-prompt", opts.systemPrompt);
+      const tf = join(mkdtempSync(join(tmpdir(), "miclaw-")), "prompt.txt");
+      writeFileSync(tf, opts.systemPrompt);
+      tempFiles.push(tf);
+      args.push("--system-prompt-file", tf);
     }
 
     // Session resumption
@@ -258,9 +268,16 @@ export class ClaudeRunner {
         stderr += chunk.toString();
       });
 
+      const cleanupTempFiles = () => {
+        for (const f of tempFiles) {
+          try { unlinkSync(f); } catch {}
+        }
+      };
+
       child.on("error", (err) => {
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
+        cleanupTempFiles();
         console.error(`[runner:${rid}] ✗ spawn error: ${err.message}`);
         resolve({
           result: "",
@@ -274,6 +291,7 @@ export class ClaudeRunner {
       child.on("close", (code) => {
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
+        cleanupTempFiles();
         const durationMs = Date.now() - startTime;
 
         if (killed) {
