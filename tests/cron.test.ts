@@ -32,9 +32,14 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
       enabled: true,
       jobsFile: "./cron/jobs.json",
       timezone: undefined,
-      ...overrides,
     },
     soulDir: "./soul",
+    defaultAgent: "assistant",
+    learning: {
+      enabled: false,
+      consolidationCron: "0 2 * * *",
+    },
+    ...overrides,
   } as any;
 }
 
@@ -122,16 +127,16 @@ describe("CronScheduler", () => {
       expect(scheduler.getHistory("job-multi")).toHaveLength(3);
     });
 
-    it("preserves full history without capping", async () => {
+    it("caps history at 100 entries per job", async () => {
       const job = makeJob({ id: "job-cap" });
       injectJob(scheduler, job);
 
-      const runs = 10;
+      const runs = 110;
       for (let i = 0; i < runs; i++) {
         await scheduler.runNow("job-cap");
       }
 
-      expect(scheduler.getHistory("job-cap")).toHaveLength(runs);
+      expect(scheduler.getHistory("job-cap")).toHaveLength(100);
     });
 
     it("getHistory without jobId returns all jobs sorted by startedAt desc", async () => {
@@ -256,6 +261,72 @@ describe("CronScheduler", () => {
         agentId: "custom-agent",
         ephemeral: true,
       });
+    });
+  });
+
+  describe("built-in learning-consolidation job", () => {
+    function injectJob(sched: CronScheduler, job: CronJob) {
+      (sched as any).jobs.push(job);
+    }
+
+    it("auto-registers consolidation job when learning.enabled is true", () => {
+      const config = makeConfig({ learning: { enabled: true, consolidationCron: "0 3 * * *" } });
+      const sched = new CronScheduler(orchestrator as any, config);
+
+      // Inject built-in jobs manually (start() reads from filesystem which we skip)
+      (sched as any).injectBuiltinJobs();
+
+      const jobs = sched.listJobs();
+      const consolJob = jobs.find((j) => j.id === "learning-consolidation");
+      expect(consolJob).toBeDefined();
+      expect(consolJob!.schedule).toBe("0 3 * * *");
+      expect(consolJob!.enabled).toBe(true);
+      expect(consolJob!.outputMode).toBe("silent");
+    });
+
+    it("does not register consolidation job when learning.enabled is false", () => {
+      const config = makeConfig({ learning: { enabled: false, consolidationCron: "0 2 * * *" } });
+      const sched = new CronScheduler(orchestrator as any, config);
+
+      (sched as any).injectBuiltinJobs();
+
+      const jobs = sched.listJobs();
+      expect(jobs.find((j) => j.id === "learning-consolidation")).toBeUndefined();
+    });
+
+    it("user-defined learning-consolidation in jobs takes precedence", () => {
+      const config = makeConfig({ learning: { enabled: true, consolidationCron: "0 2 * * *" } });
+      const sched = new CronScheduler(orchestrator as any, config);
+
+      // Simulate a user-defined job already loaded from jobs.json
+      const userJob = makeJob({
+        id: "learning-consolidation",
+        schedule: "0 4 * * *",
+        message: "custom consolidation",
+      });
+      injectJob(sched, userJob);
+
+      (sched as any).injectBuiltinJobs();
+
+      const jobs = sched.listJobs();
+      const consolJobs = jobs.filter((j) => j.id === "learning-consolidation");
+      // Should have exactly one (the user's), not a duplicate
+      expect(consolJobs).toHaveLength(1);
+      expect(consolJobs[0].schedule).toBe("0 4 * * *");
+      expect(consolJobs[0].message).toBe("custom consolidation");
+    });
+
+    it("uses config.defaultAgent for the consolidation job", () => {
+      const config = makeConfig({
+        defaultAgent: "my-agent",
+        learning: { enabled: true, consolidationCron: "0 2 * * *" },
+      });
+      const sched = new CronScheduler(orchestrator as any, config);
+
+      (sched as any).injectBuiltinJobs();
+
+      const consolJob = sched.listJobs().find((j) => j.id === "learning-consolidation");
+      expect(consolJob!.agent).toBe("my-agent");
     });
   });
 });

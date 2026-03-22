@@ -98,7 +98,7 @@ const DEFAULTS: MiclawConfig = {
   learning: {
     enabled: true,
     model: "haiku",
-    afterEveryTurn: false,
+    afterEveryTurn: true,
     consolidationCron: "0 2 * * *",
     maxLearningEntries: 200,
   },

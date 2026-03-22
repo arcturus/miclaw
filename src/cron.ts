@@ -8,6 +8,25 @@ import type { CronJob, CronExecution } from "./types.js";
 
 export type BroadcastCallback = (channelName: string, userId: string, message: string) => Promise<void>;
 
+const CONSOLIDATION_JOB_ID = "learning-consolidation";
+
+const CONSOLIDATION_PROMPT = `Review memory/learnings.md for duplicate or overlapping entries and consolidate them.
+Do NOT write journal summaries or insights directly into MEMORY.md.
+
+Learnings use this exact format (parsed by regex — do not deviate):
+- [Type|source:X|conf:Y] content text here (learned YYYY-MM-DD, reinforced YYYY-MM-DD xN)
+
+Where Type is Preference/Pattern/Mistake, source is instructed/observed/inferred/hearsay, conf is 0.00-1.00.
+The xN count shows how many times the same insight was independently re-extracted.
+
+When merging duplicate entries, keep the higher confidence, sum the reinforce counts, and use today's date as the reinforced date. Preserve the exact format above — the system parses these lines with a regex.
+
+Only promote a learning to MEMORY.md if it has conf >= 0.85 and has been reinforced at least 3 times (x3 or higher). Write the promoted insight into MEMORY.md as plain text (no brackets/metadata). Remove the promoted entry from learnings.md after moving it.
+
+Prune entries with very low confidence (conf < 0.20) that are no longer relevant.`;
+
+const MAX_HISTORY_PER_JOB = 100;
+
 export class CronScheduler {
   private tasks: Map<string, cron.ScheduledTask> = new Map();
   private jobs: CronJob[] = [];
@@ -36,12 +55,30 @@ export class CronScheduler {
       return;
     }
 
+    this.injectBuiltinJobs();
+
     for (const job of this.jobs) {
       if (!job.enabled) continue;
       this.scheduleJob(job);
     }
 
     console.log(`[cron] Scheduled ${this.tasks.size} jobs`);
+  }
+
+  /** Inject built-in jobs that are managed by config rather than jobs.json */
+  private injectBuiltinJobs(): void {
+    // Learning consolidation: auto-register if learning is enabled and no user override exists
+    if (this.config.learning.enabled && !this.jobs.some((j) => j.id === CONSOLIDATION_JOB_ID)) {
+      this.jobs.push({
+        id: CONSOLIDATION_JOB_ID,
+        schedule: this.config.learning.consolidationCron,
+        agent: this.config.defaultAgent,
+        message: CONSOLIDATION_PROMPT,
+        enabled: true,
+        outputMode: "silent",
+      });
+      console.log(`[cron] Auto-registered ${CONSOLIDATION_JOB_ID} (schedule: ${this.config.learning.consolidationCron})`);
+    }
   }
 
   /** Stop all scheduled jobs */
@@ -72,6 +109,8 @@ export class CronScheduler {
       console.warn(`[cron] Error loading jobs during reload: ${err}`);
       return { added: 0, removed: oldIds.size, total: 0 };
     }
+
+    this.injectBuiltinJobs();
 
     for (const job of this.jobs) {
       if (!job.enabled) continue;
@@ -182,6 +221,9 @@ export class CronScheduler {
   private recordExecution(exec: CronExecution): void {
     const list = this.execHistory.get(exec.jobId) ?? [];
     list.push(exec);
+    if (list.length > MAX_HISTORY_PER_JOB) {
+      list.splice(0, list.length - MAX_HISTORY_PER_JOB);
+    }
     this.execHistory.set(exec.jobId, list);
   }
 

@@ -9,14 +9,6 @@
     "broadcastTarget": { "channel": "web", "userId": "*" }
   },
   {
-    "id": "learning-consolidation",
-    "schedule": "0 2 * * *",
-    "agent": "assistant",
-    "message": "Review memory/learnings.md and memory/journals/ from the past week. Consolidate, deduplicate, and update MEMORY.md with the most important insights. Prune journal entries older than 14 days.",
-    "enabled": true,
-    "outputMode": "silent"
-  },
-  {
     "id": "heartbeat",
     "schedule": "*/30 * * * *",
     "agent": "assistant",
