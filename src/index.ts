@@ -59,11 +59,17 @@ async function main() {
   let cronScheduler: CronScheduler | null = null;
   if (config.cron.enabled) {
     const broadcastCallback = async (channelName: string, userId: string, message: string) => {
-      const channel = channels.get(channelName);
-      if (channel) {
-        await channel.send(userId, message);
+      if (channelName === "*") {
+        for (const [, channel] of channels) {
+          await channel.send(userId, message);
+        }
       } else {
-        console.warn(`[cron] Broadcast target channel "${channelName}" not found`);
+        const channel = channels.get(channelName);
+        if (channel) {
+          await channel.send(userId, message);
+        } else {
+          console.warn(`[cron] Broadcast target channel "${channelName}" not found`);
+        }
       }
     };
     cronScheduler = new CronScheduler(orchestrator, config, broadcastCallback);

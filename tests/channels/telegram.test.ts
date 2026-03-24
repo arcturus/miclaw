@@ -263,6 +263,19 @@ describe("TelegramChannel send/broadcast", () => {
     expect(sent).toBe(false);
     await channel.stop();
   });
+
+  it("send('*') broadcasts to allowedChatIds seeded at start without inbound messages", async () => {
+    const channel = new TelegramChannel(makeConfig({ allowedChatIds: ["100", "200"] }));
+    channel.onMessage(async () => ({ result: "ok", sessionId: "s", durationMs: 1 }));
+    await channel.start();
+
+    const sent = await channel.send("*", "Proactive!");
+    expect(sent).toBe(true);
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("100", "Proactive!");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("200", "Proactive!");
+    expect(mockBot.sendMessage).toHaveBeenCalledTimes(2);
+    await channel.stop();
+  });
 });
 
 describe("TelegramChannel long messages", () => {

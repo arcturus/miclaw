@@ -28,6 +28,13 @@ export class TelegramChannel implements Channel {
 
     this.bot = new TelegramBot(telegramConfig.token, { polling: true });
 
+    // Seed knownChatIds from config so send("*") works without inbound messages
+    if (telegramConfig.allowedChatIds?.length) {
+      for (const id of telegramConfig.allowedChatIds) {
+        this.knownChatIds.add(id);
+      }
+    }
+
     this.bot.on("message", async (msg) => {
       const chatId = String(msg.chat.id);
       const text = msg.text;
