@@ -86,11 +86,17 @@ export class DaemonClient {
     return new Promise((resolve, reject) => {
       let buffer = "";
 
+      const timeout = setTimeout(() => {
+        this.socket?.removeListener("data", onData);
+        reject(new Error("Daemon response timeout"));
+      }, 30_000);
+
       const onData = (data: Buffer) => {
         buffer += data.toString();
         const newlineIdx = buffer.indexOf("\n");
         if (newlineIdx !== -1) {
           const line = buffer.slice(0, newlineIdx);
+          clearTimeout(timeout);
           this.socket!.removeListener("data", onData);
           try {
             resolve(JSON.parse(line));
@@ -102,12 +108,6 @@ export class DaemonClient {
 
       this.socket!.on("data", onData);
       this.socket!.write(JSON.stringify(cmd) + "\n");
-
-      // Timeout after 30s
-      setTimeout(() => {
-        this.socket?.removeListener("data", onData);
-        reject(new Error("Daemon response timeout"));
-      }, 30_000);
     });
   }
 
@@ -124,7 +124,7 @@ export class DaemonClient {
 
   close(): void {
     if (this.socket) {
-      this.socket.end();
+      this.socket.destroy();
       this.socket = null;
     }
   }
