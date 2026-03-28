@@ -118,6 +118,15 @@ export function initWorkspace(
   // Create empty MEMORY.md
   writeFileSync(path.join(workspacePath, "memory", "MEMORY.md"), "# Memory\n");
 
+  // Claude Code stores project data at ~/.claude/projects/<path-with-dashes>
+  // e.g. /home/user/.miclaw/workspaces/mybot → ~/.claude/projects/-home-user-.miclaw-workspaces-mybot
+  const claudeProjectDir = path.join(
+    process.env.HOME ?? "",
+    ".claude",
+    "projects",
+    workspacePath.replace(/\//g, "-"),
+  );
+
   // Generate miclaw.json for this workspace:
   // - Web enabled on 127.0.0.1 with auto-assigned port
   // - CLI disabled (daemon manages the process)
@@ -140,7 +149,7 @@ export function initWorkspace(
       cli: {
         enabled: false,
         security: {
-          allowedPaths: [workspacePath],
+          allowedPaths: [workspacePath, claudeProjectDir],
         },
       },
       web: {
@@ -149,7 +158,7 @@ export function initWorkspace(
         host: "127.0.0.1",
         auth: { type: "none" },
         security: {
-          allowedPaths: [workspacePath],
+          allowedPaths: [workspacePath, claudeProjectDir],
         },
       },
     },
