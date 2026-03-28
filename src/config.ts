@@ -139,6 +139,11 @@ export function getProjectRoot(): string {
   return _projectRoot;
 }
 
+/** Returns the directory where the miclaw package is installed (for template copying) */
+export function getPackageDir(): string {
+  return path.dirname(path.dirname(new URL(import.meta.url).pathname));
+}
+
 export function loadConfig(configPath?: string): MiclawConfig {
   const filePath = configPath ?? path.join(process.cwd(), "miclaw.json");
   _projectRoot = path.dirname(path.resolve(filePath));

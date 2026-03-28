@@ -96,6 +96,12 @@ async function main() {
     console.log(`[${name}] Channel started`);
   }
 
+  // Signal readiness to daemon if managed
+  if (process.env.MICLAW_MANAGED === "1") {
+    const webPort = config.channels.web.enabled ? config.channels.web.port : null;
+    console.log(JSON.stringify({ miclaw_ready: true, webPort }));
+  }
+
   // Start Cloudflare Tunnel if enabled
   let tunnel: CloudflareTunnel | null = null;
   if (config.tunnel.enabled && config.channels.web.enabled) {
