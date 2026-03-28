@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import { initWorkspace, getWorkspace, listWorkspaces } from "./daemon/workspace.js";
+import { initWorkspace, getWorkspace, listWorkspaces, removeWorkspace } from "./daemon/workspace.js";
 import { DaemonClient } from "./daemon/client.js";
 import { DAEMON_LOGS_DIR, getTsxBin, type InstanceStatus } from "./daemon/types.js";
 
@@ -23,6 +23,7 @@ Usage:
   miclaw logs <name> [--follow]        View instance logs
   miclaw chat <name>                   Interactive chat via web API
   miclaw kill                          Stop all instances and daemon
+  miclaw destroy <name>                 Stop and remove a workspace
   miclaw doctor                        Check workspaces for issues
   miclaw help                          Show this help
 `;
@@ -56,6 +57,10 @@ async function main() {
       return cmdChat();
     case "kill":
       return cmdKill();
+    case "destroy":
+    case "rm":
+    case "remove":
+      return cmdDestroy();
     case "doctor":
       return cmdDoctor();
     default:
@@ -435,6 +440,94 @@ async function cmdKill() {
     // Daemon exits during kill, connection may close
     console.log("\x1b[32m✓\x1b[0m Daemon and all instances stopped.");
   }
+}
+
+async function cmdDestroy() {
+  const name = process.argv[3];
+  if (!name) {
+    console.error("Usage: miclaw destroy <name>");
+    process.exit(1);
+  }
+
+  const workspace = getWorkspace(name);
+  if (!workspace) {
+    console.error(`Workspace "${name}" not found.`);
+    process.exit(1);
+  }
+
+  // Show what will be deleted
+  console.log(`\x1b[1mAbout to destroy workspace "${name}":\x1b[0m`);
+  console.log(`  Path: ${workspace.path}`);
+  console.log(`  Port: ${workspace.webPort}`);
+
+  // Calculate directory size
+  try {
+    const { statSync, readdirSync } = await import("node:fs");
+    let fileCount = 0;
+    const countFiles = (dir: string) => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) countFiles(path.join(dir, entry.name));
+          else fileCount++;
+        }
+      } catch { /* skip inaccessible dirs */ }
+    };
+    countFiles(workspace.path);
+    console.log(`  Files: ${fileCount}`);
+  } catch { /* skip if can't count */ }
+
+  console.log();
+  console.log("\x1b[31mThis will permanently delete the workspace directory and all its data.\x1b[0m");
+  console.log("This includes soul files, memory, journals, sessions, and learnings.\n");
+
+  // Confirmation prompt
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(`Type "${name}" to confirm: `, resolve);
+  });
+  rl.close();
+
+  if (answer.trim() !== name) {
+    console.log("Aborted.");
+    return;
+  }
+
+  // Stop the instance if running
+  const client = new DaemonClient();
+  if (client.isDaemonRunning()) {
+    try {
+      const resp = await client.request({ type: "stop", name });
+      if (resp.ok) {
+        console.log(`\x1b[32m✓\x1b[0m Stopped instance`);
+      }
+    } catch {
+      // may not be running, that's fine
+    }
+  }
+
+  // Remove workspace directory
+  const { rmSync } = await import("node:fs");
+  try {
+    rmSync(workspace.path, { recursive: true, force: true });
+    console.log(`\x1b[32m✓\x1b[0m Removed ${workspace.path}`);
+  } catch (err) {
+    console.error(`Failed to remove directory: ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
+  }
+
+  // Remove log files
+  const stdoutLog = path.join(DAEMON_LOGS_DIR, `${name}.stdout.log`);
+  const stderrLog = path.join(DAEMON_LOGS_DIR, `${name}.stderr.log`);
+  for (const log of [stdoutLog, stderrLog]) {
+    if (existsSync(log)) {
+      rmSync(log, { force: true });
+    }
+  }
+
+  // Remove from registry
+  removeWorkspace(name);
+  console.log(`\x1b[32m✓\x1b[0m Removed from registry`);
+  console.log(`\nWorkspace "${name}" destroyed.`);
 }
 
 async function cmdDoctor() {
