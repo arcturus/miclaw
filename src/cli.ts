@@ -23,7 +23,7 @@ Usage:
   miclaw logs <name> [--follow]        View instance logs
   miclaw chat <name>                   Interactive chat via web API
   miclaw kill                          Stop all instances and daemon
-  miclaw destroy <name>                 Stop and remove a workspace
+  miclaw destroy <name>                Stop and remove a workspace
   miclaw doctor                        Check workspaces for issues
   miclaw help                          Show this help
 `;
