@@ -36,7 +36,7 @@ export interface ManagedInstance {
 export interface InstanceStatus {
   name: string;
   pid: number | null;
-  status: "running" | "stopped" | "crashed";
+  status: "running" | "stopping" | "stopped" | "crashed";
   startedAt: string | null;
   webPort: number;
   workspacePath: string;

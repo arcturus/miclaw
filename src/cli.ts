@@ -336,18 +336,32 @@ async function cmdChat() {
     process.exit(1);
   }
 
+  // Read host/port from the workspace's actual config (may have been changed)
+  let webHost = "127.0.0.1";
+  let webPort = workspace.webPort;
+  const configPath = path.join(workspace.path, workspace.configFile);
+  if (existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(configPath, "utf-8"));
+      if (cfg.channels?.web?.host) webHost = cfg.channels.web.host;
+      if (cfg.channels?.web?.port) webPort = cfg.channels.web.port;
+    } catch {
+      // fall back to registry values
+    }
+  }
+
   // Check if the instance is actually running by pinging health endpoint
-  const baseUrl = `http://127.0.0.1:${workspace.webPort}`;
+  const baseUrl = `http://${webHost}:${webPort}`;
   try {
     const resp = await fetch(`${baseUrl}/api/health`);
     if (!resp.ok) throw new Error("not healthy");
   } catch {
-    console.error(`Instance "${name}" does not appear to be running on port ${workspace.webPort}.`);
+    console.error(`Instance "${name}" does not appear to be running on port ${webPort}.`);
     console.error(`Start it with: miclaw start ${name}`);
     process.exit(1);
   }
 
-  console.log(`\x1b[1mConnected to "${name}"\x1b[0m (port ${workspace.webPort})`);
+  console.log(`\x1b[1mConnected to "${name}"\x1b[0m (port ${webPort})`);
   console.log("Type a message to chat. Ctrl+C to exit.\n");
 
   const rl = createInterface({

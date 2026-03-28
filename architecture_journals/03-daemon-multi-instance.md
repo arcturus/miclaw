@@ -8,7 +8,9 @@
 
 ## The Problem
 
-miclaw runs as a single process: one config file, one soul, one memory directory, one set of sessions. If you want two agents — say, a work assistant and a code reviewer — you need two separate copies of the entire project, each in their own directory, each started manually. There's no way to manage multiple instances from a single command line, no process supervision, and no shared understanding of what's running where.
+miclaw runs as a single process: one config file, one soul, one memory directory, one set of sessions. A single instance can run multiple agents (via `agents.json`), but all agents share the same resources — the same memory directory, the same session store, the same soul files, the same skills.
+
+If you want fully isolated environments — say, a personal assistant that works on your notes and a code reviewer that works on a separate codebase — you need two separate copies of the entire project, each in their own directory, each started manually. There's no way to manage multiple instances from a single command line, no process supervision, and no shared understanding of what's running where.
 
 This is fine for learning how the framework works. It's not fine for actually using it.
 

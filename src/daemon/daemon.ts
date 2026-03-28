@@ -207,7 +207,7 @@ class MiclawDaemon {
     return {
       name: inst.name,
       pid: inst.pid,
-      status: inst.status === "stopping" ? "running" : "running",
+      status: inst.status,
       startedAt: inst.startedAt,
       webPort: inst.webPort,
       workspacePath: inst.workspacePath,
@@ -252,12 +252,18 @@ class MiclawDaemon {
   }
 
   private async handleMessage(raw: string): Promise<DaemonResponse> {
-    let cmd: DaemonCommand;
+    let parsed: unknown;
     try {
-      cmd = JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch {
       return { ok: false, error: "Invalid JSON" };
     }
+
+    if (!parsed || typeof parsed !== "object" || !("type" in parsed) || typeof (parsed as any).type !== "string") {
+      return { ok: false, error: "Invalid command: missing 'type' field" };
+    }
+
+    const cmd = parsed as DaemonCommand;
 
     try {
       switch (cmd.type) {

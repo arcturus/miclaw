@@ -22,7 +22,17 @@ function loadRegistry(): WorkspaceRegistry {
   if (!existsSync(REGISTRY_PATH)) {
     return { version: 1, workspaces: {} };
   }
-  return JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"));
+  try {
+    const data = JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"));
+    if (!data || typeof data !== "object" || !data.workspaces) {
+      console.warn("[workspace] Corrupted registry, resetting");
+      return { version: 1, workspaces: {} };
+    }
+    return data as WorkspaceRegistry;
+  } catch (err) {
+    console.warn(`[workspace] Failed to parse registry: ${err}. Resetting.`);
+    return { version: 1, workspaces: {} };
+  }
 }
 
 function saveRegistry(registry: WorkspaceRegistry): void {
@@ -127,12 +137,20 @@ export function initWorkspace(
     maxTurnsPerSession: 20,
     sessionTtlDays: 30,
     channels: {
-      cli: { enabled: false },
+      cli: {
+        enabled: false,
+        security: {
+          allowedPaths: [workspacePath],
+        },
+      },
       web: {
         enabled: true,
         port,
         host: "127.0.0.1",
         auth: { type: "none" },
+        security: {
+          allowedPaths: [workspacePath],
+        },
       },
     },
     cron: {
