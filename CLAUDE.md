@@ -17,16 +17,32 @@ npm test              # run all tests (vitest run)
 npx vitest run tests/runner.test.ts  # run a single test file
 ```
 
+### Daemon CLI
+
+```bash
+miclaw init <name>              # create workspace at ~/.miclaw/workspaces/<name>/
+miclaw start <name>             # start instance via daemon (auto-starts daemon)
+miclaw start <name> --foreground # run in current terminal (no daemon)
+miclaw stop <name>              # graceful stop
+miclaw restart <name>           # stop + start
+miclaw list                     # table of all instances with status/PID/port
+miclaw status <name>            # detailed single-instance view
+miclaw logs <name> [--follow]   # tail instance logs
+miclaw chat <name>              # interactive REPL via web API
+miclaw kill                     # stop all instances + daemon
+```
+
 Docker: `docker compose up -d --build` (uses `miclaw.docker.json` which binds to 0.0.0.0 and disables CLI channel).
 
 ## Architecture
 
 Four-layer import hierarchy — imports go down only, no circular dependencies:
 
-- **Layer 3 (Surface):** `index.ts`, `channels/cli.ts`, `channels/web.ts`, `channels/telegram.ts`, `cron.ts`, `tunnel.ts`
+- **Layer 3 (Surface):** `index.ts`, `cli.ts`, `channels/cli.ts`, `channels/web.ts`, `channels/telegram.ts`, `cron.ts`, `tunnel.ts`
 - **Layer 2 (Coordination):** `orchestrator.ts`, `session.ts`, `learner.ts`
 - **Layer 1 (Core):** `runner.ts`, `soul.ts`, `memory.ts`, `skills.ts`
 - **Layer 0 (Types):** `types.ts`, `config.ts`
+- **Daemon (orthogonal):** `daemon/daemon.ts`, `daemon/client.ts`, `daemon/workspace.ts`, `daemon/types.ts`
 
 ### Message flow
 
@@ -40,6 +56,7 @@ Channel receives input → `orchestrator.handleMessage()` validates, resolves se
 - **ProcessPool** bounds concurrent Claude subprocesses (default: 5 concurrent, 20 queued).
 - **Security profiles per channel**: CLI gets full trust; Web/Telegram are restricted (read-only tools, rate limited, audit logged). Configured in `miclaw.json` under `channels.*.security`.
 - **Config merging**: user config deep-merges over defaults in `config.ts`. Supports `${ENV_VAR}` substitution in string values.
+- **Daemon mode**: `cli.ts` manages multiple isolated instances via a background daemon process. Each workspace (`~/.miclaw/workspaces/<name>/`) has its own config, soul, memory, and sessions. The daemon communicates over a Unix domain socket (`~/.miclaw/daemon.sock`). `miclaw chat` connects to instances via their auto-assigned web API port (starting at 3456). The daemon auto-starts on first CLI use.
 
 ### Content-driven configuration
 

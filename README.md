@@ -48,6 +48,62 @@ npm run dev    # watch mode
 npm test       # vitest
 ```
 
+### Daemon mode
+
+The daemon lets you run multiple isolated miclaw instances, each in its own workspace with separate config, soul, memory, and sessions. A single CLI manages all of them.
+
+```bash
+# Create workspaces
+miclaw init work-assistant
+miclaw init code-reviewer
+miclaw init research-bot
+
+# Start them
+miclaw start work-assistant
+miclaw start code-reviewer
+
+# See what's running
+miclaw list
+```
+
+```
+NAME              STATUS    PID     PORT   UPTIME
+work-assistant    running   12345   3456   2h 15m
+code-reviewer     running   12389   3457   45m
+research-bot      stopped   -       3458   -
+```
+
+```bash
+# Chat with a running instance
+miclaw chat work-assistant
+
+# View logs
+miclaw logs code-reviewer --follow
+
+# Stop / restart
+miclaw stop work-assistant
+miclaw restart code-reviewer
+
+# Kill everything (all instances + daemon)
+miclaw kill
+```
+
+Each workspace is a self-contained directory under `~/.miclaw/workspaces/<name>/` with its own `miclaw.json`, `soul/`, `skills/`, `memory/`, `sessions/`, and `cron/`. Template files are copied from the miclaw package at init time.
+
+**How it works:** The daemon is a background process that manages child processes over a Unix domain socket. Each instance runs the standard miclaw entry point with its workspace config. The CLI auto-starts the daemon on first use. `miclaw chat` connects to the instance's web API on localhost — each workspace gets an auto-assigned port (starting at 3456) bound to `127.0.0.1` only.
+
+**Install globally** to use `miclaw` anywhere:
+
+```bash
+npm link           # from the miclaw repo
+# or
+npm install -g .   # global install
+```
+
+You can also run without installing: `npx tsx src/cli.ts <command>`.
+
+Run `miclaw start <name> --foreground` to run an instance in the current terminal (bypasses the daemon, useful for debugging).
+
 ### Docker
 
 You can also run miclaw as a container. The web channel is the primary interface in this mode. The Dockerfile uses `miclaw.docker.json` which binds the web server to `0.0.0.0` (instead of `127.0.0.1`) so Docker port mapping works, and disables the CLI channel.
@@ -389,6 +445,7 @@ You can also pass a config path: `npm start /path/to/config.json`
 ```
 src/
   index.ts          Entry point — wires everything together
+  cli.ts            Daemon CLI entry point (miclaw init/start/stop/list/chat/...)
   orchestrator.ts   Central hub: routes messages, assembles souls, manages lifecycle
   runner.ts         Spawns claude -p subprocesses, parses NDJSON streams
   soul.ts           Reads and concatenates soul markdown files
@@ -405,12 +462,23 @@ src/
     cli.ts          Interactive readline REPL
     web.ts          HTTP server, chat UI, admin dashboard, SSE streaming
     telegram.ts     Telegram bot via long polling
+  daemon/
+    types.ts        Daemon type definitions and constants
+    workspace.ts    Workspace creation, registry, port management
+    daemon.ts       Background process manager (Unix socket server)
+    client.ts       Socket client for CLI-to-daemon communication
 soul/               Default agent personality files
 skills/             Skill definitions (markdown + YAML frontmatter)
 memory/             Long-term memory and journals
 sessions/           Session state persistence
 cron/               Scheduled job definitions
 tests/              Full test suite (vitest)
+~/.miclaw/          Daemon state (created at runtime)
+  workspaces.json   Registry of workspace name → path + port mappings
+  daemon.json       Daemon PID and socket path
+  daemon.sock       Unix domain socket (runtime only)
+  logs/             Per-instance stdout/stderr logs
+  workspaces/       Workspace directories (one per instance)
 ```
 
 ## Tests
