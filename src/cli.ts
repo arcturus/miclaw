@@ -23,6 +23,7 @@ Usage:
   miclaw logs <name> [--follow]        View instance logs
   miclaw chat <name>                   Interactive chat via web API
   miclaw kill                          Stop all instances and daemon
+  miclaw doctor                        Check workspaces for issues
   miclaw help                          Show this help
 `;
 
@@ -55,6 +56,8 @@ async function main() {
       return cmdChat();
     case "kill":
       return cmdKill();
+    case "doctor":
+      return cmdDoctor();
     default:
       console.error(`Unknown command: ${command}\n`);
       console.log(USAGE);
@@ -431,6 +434,120 @@ async function cmdKill() {
   } catch {
     // Daemon exits during kill, connection may close
     console.log("\x1b[32m✓\x1b[0m Daemon and all instances stopped.");
+  }
+}
+
+async function cmdDoctor() {
+  const workspaces = listWorkspaces();
+
+  if (workspaces.length === 0) {
+    console.log("No workspaces found. Nothing to check.");
+    return;
+  }
+
+  console.log(`\x1b[1mChecking ${workspaces.length} workspace(s)...\x1b[0m\n`);
+
+  let issues = 0;
+
+  for (const ws of workspaces) {
+    const problems: string[] = [];
+    const warnings: string[] = [];
+
+    // Check workspace directory exists
+    if (!existsSync(ws.path)) {
+      problems.push(`Workspace directory missing: ${ws.path}`);
+    } else {
+      // Check config file
+      const configPath = path.join(ws.path, ws.configFile);
+      if (!existsSync(configPath)) {
+        problems.push(`Config file missing: ${ws.configFile}`);
+      } else {
+        try {
+          const cfg = JSON.parse(readFileSync(configPath, "utf-8"));
+
+          // Check web channel is enabled (required for daemon chat)
+          if (!cfg.channels?.web?.enabled) {
+            warnings.push("Web channel disabled — miclaw chat will not work");
+          }
+
+          // Check port matches registry
+          if (cfg.channels?.web?.port && cfg.channels.web.port !== ws.webPort) {
+            warnings.push(`Config port (${cfg.channels.web.port}) differs from registry (${ws.webPort})`);
+          }
+
+          // Check allowedPaths includes workspace dir
+          const webAllowed = cfg.channels?.web?.security?.allowedPaths ?? [];
+          if (webAllowed.length > 0 && !webAllowed.includes(ws.path)) {
+            warnings.push("allowedPaths does not include workspace directory");
+          }
+        } catch {
+          problems.push(`Config file corrupted: ${ws.configFile}`);
+        }
+      }
+
+      // Check required directories
+      for (const dir of ["soul", "memory", "sessions"]) {
+        if (!existsSync(path.join(ws.path, dir))) {
+          problems.push(`Missing directory: ${dir}/`);
+        }
+      }
+
+      // Check required soul files
+      const soulDir = path.join(ws.path, "soul");
+      if (existsSync(soulDir)) {
+        if (!existsSync(path.join(soulDir, "AGENTS.md"))) {
+          problems.push("Missing required soul file: soul/AGENTS.md");
+        }
+        if (!existsSync(path.join(soulDir, "SOUL.md"))) {
+          problems.push("Missing required soul file: soul/SOUL.md");
+        }
+      }
+
+      // Check port is not obviously conflicting with another workspace
+      const portConflicts = workspaces.filter(
+        (other) => other.name !== ws.name && other.webPort === ws.webPort,
+      );
+      if (portConflicts.length > 0) {
+        problems.push(`Port ${ws.webPort} conflicts with: ${portConflicts.map((c) => c.name).join(", ")}`);
+      }
+    }
+
+    // Print results
+    if (problems.length === 0 && warnings.length === 0) {
+      console.log(`\x1b[32m✓\x1b[0m ${ws.name} — healthy`);
+    } else {
+      if (problems.length > 0) {
+        console.log(`\x1b[31m✗\x1b[0m ${ws.name} — ${problems.length} problem(s)`);
+        for (const p of problems) {
+          console.log(`    \x1b[31m✗\x1b[0m ${p}`);
+        }
+        issues += problems.length;
+      }
+      if (warnings.length > 0) {
+        if (problems.length === 0) {
+          console.log(`\x1b[33m!\x1b[0m ${ws.name} — ${warnings.length} warning(s)`);
+        }
+        for (const w of warnings) {
+          console.log(`    \x1b[33m!\x1b[0m ${w}`);
+        }
+      }
+    }
+  }
+
+  // Check daemon state
+  console.log();
+  const client = new DaemonClient();
+  if (client.isDaemonRunning()) {
+    console.log("\x1b[32m✓\x1b[0m Daemon is running");
+  } else {
+    console.log("\x1b[90m-\x1b[0m Daemon is not running (starts automatically on demand)");
+  }
+
+  console.log();
+  if (issues > 0) {
+    console.log(`\x1b[31m${issues} problem(s) found.\x1b[0m`);
+  } else {
+    console.log("\x1b[32mAll workspaces healthy.\x1b[0m");
   }
 }
 
