@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 // Daemon process — manages multiple miclaw instances via Unix socket
-import { createServer, type Server, type Socket } from "node:net";
+import { createServer, connect as netConnect, type Server, type Socket } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { createWriteStream } from "node:fs";
@@ -107,6 +107,15 @@ class MiclawDaemon {
       throw new Error(`Config not found at ${configPath}`);
     }
 
+    // Check if the port is already in use (e.g. orphaned process from previous daemon)
+    const portInUse = await this.isPortInUse(workspace.webPort);
+    if (portInUse) {
+      throw new Error(
+        `Port ${workspace.webPort} is already in use. An orphaned instance may be running. ` +
+        `Check with: lsof -i :${workspace.webPort}`
+      );
+    }
+
     // Find the miclaw index.ts entry point
     const indexPath = path.join(
       path.dirname(path.dirname(new URL(import.meta.url).pathname)),
@@ -139,14 +148,26 @@ class MiclawDaemon {
       child,
     };
 
+    // Wait briefly to catch immediate crashes (e.g. config errors)
+    let crashed = false;
     child.on("exit", (code, signal) => {
       console.log(`[daemon] Instance "${name}" exited (code=${code}, signal=${signal})`);
       this.instances.delete(name);
+      crashed = true;
       stdoutStream.close();
       stderrStream.close();
     });
 
     this.instances.set(name, instance);
+
+    // Give the process a moment to crash on startup errors
+    await new Promise((r) => setTimeout(r, 500));
+    if (crashed) {
+      throw new Error(
+        `Instance "${name}" crashed immediately after starting. Check logs: miclaw logs ${name}`
+      );
+    }
+
     console.log(`[daemon] Started "${name}" (pid=${child.pid}, port=${workspace.webPort})`);
 
     return this.toStatus(instance);
@@ -198,6 +219,14 @@ class MiclawDaemon {
         workspacePath: ws.path,
         uptime: null,
       };
+    });
+  }
+
+  private isPortInUse(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const sock = netConnect({ port, host: "127.0.0.1" });
+      sock.once("connect", () => { sock.destroy(); resolve(true); });
+      sock.once("error", () => { sock.destroy(); resolve(false); });
     });
   }
 
