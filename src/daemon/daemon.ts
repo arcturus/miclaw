@@ -10,6 +10,7 @@ import {
   DAEMON_STATE_PATH,
   DAEMON_SOCKET_PATH,
   DAEMON_LOGS_DIR,
+  getTsxBin,
   type DaemonState,
   type DaemonCommand,
   type DaemonResponse,
@@ -118,7 +119,7 @@ class MiclawDaemon {
     const stdoutStream = createWriteStream(stdoutLog, { flags: "a" });
     const stderrStream = createWriteStream(stderrLog, { flags: "a" });
 
-    const child = spawn("tsx", [indexPath, configPath], {
+    const child = spawn(getTsxBin(), [indexPath, configPath], {
       cwd: workspace.path,
       env: { ...process.env, MICLAW_MANAGED: "1" },
       stdio: ["ignore", "pipe", "pipe"],

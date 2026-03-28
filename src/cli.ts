@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { initWorkspace, getWorkspace, listWorkspaces } from "./daemon/workspace.js";
 import { DaemonClient } from "./daemon/client.js";
-import { DAEMON_LOGS_DIR, type InstanceStatus } from "./daemon/types.js";
+import { DAEMON_LOGS_DIR, getTsxBin, type InstanceStatus } from "./daemon/types.js";
 
 // ─── Argument Parsing ───────────────────────────────────────
 
@@ -142,7 +142,7 @@ async function cmdStartForeground(name: string) {
   );
 
   const { spawn } = await import("node:child_process");
-  const child = spawn("tsx", [indexPath, configPath], {
+  const child = spawn(getTsxBin(), [indexPath, configPath], {
     cwd: workspace.path,
     stdio: "inherit",
     env: { ...process.env, MICLAW_MANAGED: "1" },

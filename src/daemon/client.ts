@@ -7,6 +7,7 @@ import {
   DAEMON_STATE_PATH,
   DAEMON_SOCKET_PATH,
   DAEMON_LOGS_DIR,
+  getTsxBin,
   type DaemonState,
   type DaemonCommand,
   type DaemonResponse,
@@ -43,7 +44,7 @@ export class DaemonClient {
     mkdirSync(DAEMON_LOGS_DIR, { recursive: true });
     const logFd = openSync(logPath, "a");
 
-    const child = spawn("tsx", [daemonScript], {
+    const child = spawn(getTsxBin(), [daemonScript], {
       detached: true,
       stdio: ["ignore", logFd, logFd],
       env: { ...process.env, MICLAW_DAEMON: "1" },
