@@ -92,7 +92,7 @@ Create `agents.json` in the project root to register multiple agents:
 **Key fields:**
 - `skills`: Array of skill names to include (empty = all skills). Maps to skills in `skillsDir`.
 - `memoryDir`: Optional isolated memory directory. If omitted, shares the default `memoryDir`.
-- `interAgentDelegation`: Set to `true` in `miclaw.json` to enable agents delegating tasks to each other via ` ```delegate ` blocks. Max 1 delegation per turn, depth 1 (no chains).
+- `interAgentDelegation`: Enabled by default. Agents can delegate tasks to each other via ` ```delegate ` blocks. Max 1 delegation per turn, depth 1 (no chains). Set to `false` in `miclaw.json` to disable.
 
 ## Testing
 

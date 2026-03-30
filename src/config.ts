@@ -103,7 +103,7 @@ const DEFAULTS: MiclawConfig = {
     consolidationCron: "0 2 * * *",
     maxLearningEntries: 200,
   },
-  interAgentDelegation: false,
+  interAgentDelegation: true,
   tunnel: {
     enabled: false,
     mode: "quick",
