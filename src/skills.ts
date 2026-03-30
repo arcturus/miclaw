@@ -126,7 +126,12 @@ export class SkillLoader {
 
   /** Get the skills section for system prompt injection */
   getPromptSection(): string {
-    const skills = this.load();
+    return this.getPromptSectionFor();
+  }
+
+  /** Get the skills section filtered by skill names (all skills if names is undefined/empty) */
+  getPromptSectionFor(skillNames?: string[]): string {
+    const skills = this.filterSkills(skillNames);
     if (skills.length === 0) return "";
 
     const lines = ["## Available Skills\n"];
@@ -144,7 +149,12 @@ export class SkillLoader {
 
   /** Get all allowed tools from all loaded skills */
   getAllAllowedTools(): string[] {
-    const skills = this.load();
+    return this.getAllowedToolsFor();
+  }
+
+  /** Get allowed tools filtered by skill names (all skills if names is undefined/empty) */
+  getAllowedToolsFor(skillNames?: string[]): string[] {
+    const skills = this.filterSkills(skillNames);
     const tools = new Set<string>();
     for (const skill of skills) {
       for (const tool of skill.allowedTools) {
@@ -152,5 +162,13 @@ export class SkillLoader {
       }
     }
     return [...tools];
+  }
+
+  /** Filter loaded skills by name list. Returns all if names is undefined or empty. */
+  private filterSkills(skillNames?: string[]): SkillDefinition[] {
+    const all = this.load();
+    if (!skillNames || skillNames.length === 0) return all;
+    const nameSet = new Set(skillNames);
+    return all.filter((s) => nameSet.has(s.name));
   }
 }

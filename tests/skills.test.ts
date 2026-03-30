@@ -102,6 +102,80 @@ Body 2
     expect(tools.filter((t) => t === "Read")).toHaveLength(1);
   });
 
+  it("getPromptSectionFor filters by skill names", () => {
+    mkdirSync(path.join(tempDir, "s1"));
+    mkdirSync(path.join(tempDir, "s2"));
+    mkdirSync(path.join(tempDir, "s3"));
+    writeFileSync(path.join(tempDir, "s1", "SKILL.md"), `---
+name: s1
+description: Skill 1
+---
+Body 1
+`);
+    writeFileSync(path.join(tempDir, "s2", "SKILL.md"), `---
+name: s2
+description: Skill 2
+---
+Body 2
+`);
+    writeFileSync(path.join(tempDir, "s3", "SKILL.md"), `---
+name: s3
+description: Skill 3
+---
+Body 3
+`);
+    const loader = new SkillLoader(tempDir);
+    const filtered = loader.getPromptSectionFor(["s1", "s3"]);
+    expect(filtered).toContain("### s1");
+    expect(filtered).toContain("### s3");
+    expect(filtered).not.toContain("### s2");
+  });
+
+  it("getPromptSectionFor returns all skills when names is undefined", () => {
+    mkdirSync(path.join(tempDir, "s1"));
+    mkdirSync(path.join(tempDir, "s2"));
+    writeFileSync(path.join(tempDir, "s1", "SKILL.md"), `---
+name: s1
+description: Skill 1
+---
+Body 1
+`);
+    writeFileSync(path.join(tempDir, "s2", "SKILL.md"), `---
+name: s2
+description: Skill 2
+---
+Body 2
+`);
+    const loader = new SkillLoader(tempDir);
+    const all = loader.getPromptSectionFor();
+    expect(all).toContain("### s1");
+    expect(all).toContain("### s2");
+  });
+
+  it("getAllowedToolsFor filters tools by skill names", () => {
+    mkdirSync(path.join(tempDir, "s1"));
+    mkdirSync(path.join(tempDir, "s2"));
+    writeFileSync(path.join(tempDir, "s1", "SKILL.md"), `---
+name: s1
+description: Skill 1
+allowed-tools: [Read, WebSearch]
+---
+Body 1
+`);
+    writeFileSync(path.join(tempDir, "s2", "SKILL.md"), `---
+name: s2
+description: Skill 2
+allowed-tools: [Read, Grep]
+---
+Body 2
+`);
+    const loader = new SkillLoader(tempDir);
+    const tools = loader.getAllowedToolsFor(["s1"]);
+    expect(tools).toContain("Read");
+    expect(tools).toContain("WebSearch");
+    expect(tools).not.toContain("Grep");
+  });
+
   it("parseAllowedTools handles comma-separated strings", () => {
     const skillDir = path.join(tempDir, "csv-skill");
     mkdirSync(skillDir);

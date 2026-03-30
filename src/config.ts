@@ -60,6 +60,7 @@ export interface MiclawConfig {
     consolidationCron: string;
     maxLearningEntries: number;
   };
+  interAgentDelegation: boolean;
   tunnel: TunnelConfig;
 }
 
@@ -102,6 +103,7 @@ const DEFAULTS: MiclawConfig = {
     consolidationCron: "0 2 * * *",
     maxLearningEntries: 200,
   },
+  interAgentDelegation: false,
   tunnel: {
     enabled: false,
     mode: "quick",

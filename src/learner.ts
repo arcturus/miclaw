@@ -73,17 +73,19 @@ export class Learner {
   }
 
   /** Run post-turn reflection and extract learnings */
-  async reflect(userMessage: string, assistantResponse: string): Promise<number> {
+  async reflect(userMessage: string, assistantResponse: string, memoryOverride?: MemoryManager): Promise<number> {
     if (!this.config.learning.enabled) return 0;
 
+    const memory = memoryOverride ?? this.memory;
+
     // Check learning count limit
-    const count = this.memory.countLearnings();
+    const count = memory.countLearnings();
     if (count >= this.config.learning.maxLearningEntries) {
       console.warn(`[learner] Learning limit reached (${count}/${this.config.learning.maxLearningEntries}), skipping reflection`);
       return 0;
     }
 
-    const existingLearnings = this.memory.readLearnings();
+    const existingLearnings = memory.readLearnings();
     const today = new Date().toISOString().split("T")[0];
 
     const prompt = `<interaction>
@@ -131,7 +133,7 @@ Extract new insights from this interaction. Only include items NOT already cover
         for (const raw of items) {
           const entry = normalizeLearningEntry(raw);
           // Try reinforcement first
-          const reinforced = this.memory.reinforceLearning(entry.content, today);
+          const reinforced = memory.reinforceLearning(entry.content, today);
           if (!reinforced && !this.isDuplicate(entry.content, existingLearnings)) {
             newEntries.push(formatLearning(type, entry, today));
           }
@@ -139,7 +141,7 @@ Extract new insights from this interaction. Only include items NOT already cover
       }
 
       if (newEntries.length > 0) {
-        this.memory.appendLearnings(newEntries);
+        memory.appendLearnings(newEntries);
       }
 
       return newEntries.length;
