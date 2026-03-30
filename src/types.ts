@@ -26,6 +26,20 @@ export interface MessageOutput {
   sessionId: string;
   cost?: number;
   durationMs: number;
+  delegations?: DelegationResult[];
+}
+
+export interface DelegationRequest {
+  targetAgent: string;
+  message: string;
+  context?: string;
+}
+
+export interface DelegationResult {
+  targetAgent: string;
+  result: string;
+  cost?: number;
+  durationMs: number;
 }
 
 // ─── Claude Runner ─────────────────────────────────────────
@@ -147,6 +161,7 @@ export interface AgentConfig {
   allowedTools?: string[];
   mcpConfig?: string;
   permissionMode?: string;
+  memoryDir?: string;
 }
 
 // ─── Security ──────────────────────────────────────────────

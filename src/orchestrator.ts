@@ -6,7 +6,7 @@ import { SkillLoader } from "./skills.js";
 import { SessionManager } from "./session.js";
 import { Learner } from "./learner.js";
 import { getSecurityProfile, resolvePath, type MiclawConfig } from "./config.js";
-import type { MessageInput, MessageOutput, AgentConfig } from "./types.js";
+import type { MessageInput, MessageOutput, AgentConfig, DelegationRequest, DelegationResult } from "./types.js";
 import { ValidationError, SecurityViolationError } from "./types.js";
 import { RateLimiter, AuditLogger } from "./security.js";
 
@@ -25,6 +25,7 @@ export class Orchestrator {
   private pool: ProcessPool;
   private soul: SoulLoader;
   private memory: MemoryManager;
+  private agentMemory: Map<string, MemoryManager> = new Map();
   private skills: SkillLoader;
   private sessions: SessionManager;
   private learner: Learner;
@@ -57,6 +58,21 @@ export class Orchestrator {
   /** Register an agent config */
   registerAgent(agent: AgentConfig): void {
     this.agents.set(agent.id, agent);
+  }
+
+  /** Get memory manager for an agent (per-agent if memoryDir is set, shared otherwise) */
+  private getMemoryForAgent(agent?: AgentConfig): MemoryManager {
+    if (!agent?.memoryDir) return this.memory;
+    const cached = this.agentMemory.get(agent.id);
+    if (cached) return cached;
+    const mgr = new MemoryManager({ ...this.config, memoryDir: agent.memoryDir });
+    this.agentMemory.set(agent.id, mgr);
+    return mgr;
+  }
+
+  /** Build agent directory section for system prompt (lists other available agents) */
+  private getAgentDirectorySection(currentAgentId: string): string {
+    return buildAgentDirectory([...this.agents.values()], currentAgentId, this.config.interAgentDelegation);
   }
 
   /** Handle an incoming message from any channel */
@@ -136,10 +152,14 @@ export class Orchestrator {
     // Assemble soul prompt
     const soulDir = agent?.soulDir ?? this.config.soulDir;
     const soulPrompt = this.soul.assemble(soulDir);
-    const memoryContext = this.memory.getContext();
-    const skillsSection = this.skills.getPromptSection();
+    const agentMemory = this.getMemoryForAgent(agent);
+    const memoryContext = agentMemory.getContext();
+    const agentSkills = agent?.skills?.length ? agent.skills : undefined;
+    const skillsSection = this.skills.getPromptSectionFor(agentSkills);
 
-    const fullPrompt = [soulPrompt, memoryContext, skillsSection]
+    const agentDirectory = this.getAgentDirectorySection(agentId);
+
+    const fullPrompt = [soulPrompt, memoryContext, skillsSection, agentDirectory]
       .filter(Boolean)
       .join("\n\n---\n\n");
 
@@ -149,7 +169,7 @@ export class Orchestrator {
     const allowedTools = [
       ...(security.allowedTools.length > 0 ? security.allowedTools : []),
       ...(agent?.allowedTools ?? []),
-      ...this.skills.getAllAllowedTools(),
+      ...this.skills.getAllowedToolsFor(agentSkills),
     ];
 
     if (allowedTools.length > 0) {
@@ -215,15 +235,15 @@ export class Orchestrator {
 
       // Journal (non-ephemeral interactions)
       if (!input.ephemeral) {
-        this.memory.appendJournal({ role: "user", content: input.message });
-        this.memory.appendJournal({ role: "assistant", content: result.result });
+        agentMemory.appendJournal({ role: "user", content: input.message });
+        agentMemory.appendJournal({ role: "assistant", content: result.result });
         console.log(`[msg:${mid}] journal written`);
       }
 
       // Self-learning (fire-and-forget, only if enabled for this channel)
       if (this.config.learning.afterEveryTurn && security.learningEnabled && !input.ephemeral) {
         console.log(`[msg:${mid}] triggering self-learning reflection`);
-        this.learner.reflect(input.message, result.result).catch((err) => {
+        this.learner.reflect(input.message, result.result, agentMemory).catch((err) => {
           console.warn(`[msg:${mid}] learning reflection failed: ${err}`);
         });
       }
@@ -255,12 +275,53 @@ export class Orchestrator {
         }
       }
 
+      // Inter-agent delegation
+      let delegationResults: DelegationResult[] | undefined;
+      if (this.config.interAgentDelegation && !input.metadata?.isDelegation) {
+        const delegations = parseDelegationBlocks(result.result);
+        if (delegations.length > 0) {
+          // Limit to 1 delegation per turn to prevent loops
+          const delegation = delegations[0];
+          if (this.agents.has(delegation.targetAgent)) {
+            console.log(`[msg:${mid}] delegation: ${agentId} -> ${delegation.targetAgent}`);
+            try {
+              const delegatedResult = await this.handleMessage({
+                channelId: input.channelId,
+                userId: input.userId,
+                message: delegation.context
+                  ? `Context: ${delegation.context}\n\n${delegation.message}`
+                  : delegation.message,
+                agentId: delegation.targetAgent,
+                ephemeral: true,
+                metadata: { isDelegation: true },
+              });
+              delegationResults = [{
+                targetAgent: delegation.targetAgent,
+                result: delegatedResult.result,
+                cost: delegatedResult.cost,
+                durationMs: delegatedResult.durationMs,
+              }];
+              console.log(`[msg:${mid}] delegation complete: cost=$${delegatedResult.cost?.toFixed(4) ?? "?"}`);
+            } catch (err) {
+              console.warn(`[msg:${mid}] delegation failed: ${err}`);
+            }
+          } else {
+            console.warn(`[msg:${mid}] delegation target not found: ${delegation.targetAgent}`);
+          }
+        }
+      }
+
+      const finalResult = delegationResults?.length
+        ? `${result.result}\n\n---\n\n**Delegation result from ${delegationResults[0].targetAgent}:**\n\n${delegationResults[0].result}`
+        : result.result;
+
       console.log(`[msg:${mid}] ── done ──────────────────────────────────`);
       return {
-        result: result.result,
+        result: finalResult,
         sessionId: session?.id ?? `ephemeral:${Date.now()}`,
         cost: result.cost,
-        durationMs: totalMs,
+        durationMs: Date.now() - startTime,
+        delegations: delegationResults,
       };
     } finally {
       this.pool.release();
@@ -296,4 +357,52 @@ export class Orchestrator {
   getAgents(): AgentConfig[] {
     return [...this.agents.values()];
   }
+}
+
+/** Build agent directory section for system prompt (pure function, exported for testing) */
+export function buildAgentDirectory(agents: AgentConfig[], currentAgentId: string, delegationEnabled: boolean = false): string {
+  const others = agents.filter((a) => a.id !== currentAgentId);
+  if (others.length === 0) return "";
+  const lines = ["## Available Agents\n"];
+  lines.push("The following agents are available in this system:\n");
+  for (const a of others) {
+    lines.push(`- **${a.id}**: ${a.description}`);
+  }
+  if (delegationEnabled) {
+    lines.push("");
+    lines.push("### Delegation");
+    lines.push("");
+    lines.push("To delegate a task to another agent, include a fenced code block with the language tag `delegate`:");
+    lines.push("");
+    lines.push("````");
+    lines.push("```delegate");
+    lines.push('{"targetAgent": "agent-id", "message": "task description", "context": "optional context"}');
+    lines.push("```");
+    lines.push("````");
+    lines.push("");
+    lines.push("The system will execute the delegation and append the result to your response. Only one delegation per turn is allowed.");
+  }
+  return lines.join("\n");
+}
+
+/** Parse delegation blocks from an agent response (exported for testing) */
+export function parseDelegationBlocks(response: string): DelegationRequest[] {
+  const delegations: DelegationRequest[] = [];
+  const regex = /```delegate\s*\n([\s\S]*?)```/g;
+  let match;
+  while ((match = regex.exec(response)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (parsed.targetAgent && parsed.message) {
+        delegations.push({
+          targetAgent: String(parsed.targetAgent),
+          message: String(parsed.message),
+          context: parsed.context ? String(parsed.context) : undefined,
+        });
+      }
+    } catch {
+      // Skip malformed delegation blocks
+    }
+  }
+  return delegations;
 }

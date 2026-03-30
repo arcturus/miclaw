@@ -238,9 +238,10 @@ describe("MemoryManager", () => {
 
   describe("getContext with confidence annotations", () => {
     it("annotates learnings with HIGH/MED/LOW tags", () => {
+      const today = new Date().toISOString().split("T")[0];
       const content = [
-        "- [Preference|source:instructed|conf:0.95] Use dark mode (learned 2026-03-21)",
-        "- [Pattern|source:inferred|conf:0.65] Prefers short answers (learned 2026-03-20)",
+        `- [Preference|source:instructed|conf:0.95] Use dark mode (learned ${today})`,
+        `- [Pattern|source:inferred|conf:0.65] Prefers short answers (learned ${today})`,
       ].join("\n");
       writeFileSync(path.join(tempDir, "learnings.md"), content);
       mm = new MemoryManager(makeConfig(tempDir));
@@ -347,6 +348,39 @@ describe("MemoryManager", () => {
 
       const remaining = readFileSync(path.join(tempDir, "learnings.md"), "utf-8");
       expect(remaining.trim()).toBe("");
+    });
+  });
+
+  describe("per-agent memory isolation", () => {
+    it("two MemoryManagers with different dirs have isolated state", () => {
+      const agentDir = mkdtempSync(path.join(tmpdir(), "miclaw-agent-mem-"));
+      try {
+        const agentMm = new MemoryManager(makeConfig(agentDir));
+
+        // Write to shared memory
+        mm.appendJournal({ role: "user", content: "shared message" });
+        mm.appendLearnings(["[Pattern|source:inferred|conf:0.65] shared learning (learned 2026-03-30)"]);
+
+        // Write to agent memory
+        agentMm.appendJournal({ role: "user", content: "agent message" });
+        agentMm.appendLearnings(["[Pattern|source:inferred|conf:0.65] agent learning (learned 2026-03-30)"]);
+
+        // Verify isolation
+        const sharedCtx = mm.getContext();
+        const agentCtx = agentMm.getContext();
+
+        expect(sharedCtx).toContain("shared message");
+        expect(sharedCtx).not.toContain("agent message");
+        expect(agentCtx).toContain("agent message");
+        expect(agentCtx).not.toContain("shared message");
+
+        expect(mm.readLearnings()).toContain("shared learning");
+        expect(mm.readLearnings()).not.toContain("agent learning");
+        expect(agentMm.readLearnings()).toContain("agent learning");
+        expect(agentMm.readLearnings()).not.toContain("shared learning");
+      } finally {
+        rmSync(agentDir, { recursive: true, force: true });
+      }
     });
   });
 });

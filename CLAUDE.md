@@ -46,7 +46,7 @@ Four-layer import hierarchy — imports go down only, no circular dependencies:
 
 ### Message flow
 
-Channel receives input → `orchestrator.handleMessage()` validates, resolves session, assembles system prompt (soul + memory + skills), spawns `claude -p --output-format stream-json` via `ClaudeRunner` → runner parses NDJSON in real time with security enforcement (path/URL checks, kills process on violation) → orchestrator updates session, writes journal, optionally triggers learner reflection → channel delivers response.
+Channel receives input → `orchestrator.handleMessage()` validates, resolves session, assembles system prompt (soul + memory + skills + agent directory), spawns `claude -p --output-format stream-json` via `ClaudeRunner` → runner parses NDJSON in real time with security enforcement (path/URL checks, kills process on violation) → orchestrator checks for delegation blocks (if `interAgentDelegation: true`) and executes them → orchestrator updates session, writes journal, optionally triggers learner reflection → channel delivers response.
 
 ### Key design decisions
 
@@ -62,8 +62,37 @@ Channel receives input → `orchestrator.handleMessage()` validates, resolves se
 
 - **Soul** (`soul/`): Markdown files (AGENTS.md, SOUL.md, IDENTITY.md, TOOLS.md) concatenated into the system prompt.
 - **Skills** (`skills/<name>/SKILL.md`): Markdown with YAML frontmatter. Gate on `requires.bins`, `requires.env`, `requires.os` — silently excluded if prerequisites aren't met.
-- **Agents** (`agents.json`): Each agent specifies its own soul dir, skills, model, and tool restrictions.
+- **Agents** (`agents.json`): Each agent specifies its own soul dir, skills, model, tool restrictions, and optionally its own `memoryDir` for isolated memory/journals/learnings. Agents with `skills: ["skill-a"]` only get those skills in their prompt (empty array = all skills). Registered agents are listed in each other's system prompts for discovery.
 - **Cron** (`cron/jobs.json`): Scheduled tasks with template variables (`{{DATE}}`, `{{JOURNALS_LAST_N}}`). A `learning-consolidation` job is auto-registered when `learning.enabled: true`.
+
+### Multi-agent configuration
+
+Create `agents.json` in the project root to register multiple agents:
+
+```json
+{
+  "code-reviewer": {
+    "description": "Reviews pull requests and code quality",
+    "soulDir": "./souls/reviewer",
+    "skills": ["github-pr"],
+    "model": "sonnet",
+    "allowedTools": ["Read", "Glob", "Grep", "WebFetch"],
+    "memoryDir": "./memory/reviewer"
+  },
+  "researcher": {
+    "description": "Deep research agent for investigation tasks",
+    "soulDir": "./souls/researcher",
+    "skills": ["web-search"],
+    "model": "opus",
+    "memoryDir": "./memory/researcher"
+  }
+}
+```
+
+**Key fields:**
+- `skills`: Array of skill names to include (empty = all skills). Maps to skills in `skillsDir`.
+- `memoryDir`: Optional isolated memory directory. If omitted, shares the default `memoryDir`.
+- `interAgentDelegation`: Enabled by default. Agents can delegate tasks to each other via ` ```delegate ` blocks. Max 1 delegation per turn, depth 1 (no chains). Set to `false` in `miclaw.json` to disable.
 
 ## Testing
 
