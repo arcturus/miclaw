@@ -171,11 +171,10 @@ export class ClaudeRunner {
       args.push("--model", opts.model);
     }
 
-    // Allowed tools
+    // Tool restrictions: --tools restricts which tools are available,
+    // --allowedTools only controls permission auto-approval (not availability)
     if (opts.allowedTools && opts.allowedTools.length > 0) {
-      for (const tool of opts.allowedTools) {
-        args.push("--allowedTools", tool);
-      }
+      args.push("--tools", opts.allowedTools.join(","));
     }
 
     // MCP config

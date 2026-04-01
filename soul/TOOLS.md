@@ -14,7 +14,7 @@ When asked to "remember" something, write it to `./memory/MEMORY.md`.
 
 ## Scheduling / Cron
 
-**Do NOT use system crontab, `at`, `sleep`-loops, or file-based reminders.** Never run `crontab -e`, `at`, or create ad-hoc scheduling scripts.
+**Do NOT use system crontab, `at`, `sleep`-loops, file-based reminders, or Claude Code's built-in scheduling tools (`CronCreate`, `CronDelete`, `CronList`, `schedule`).** Never run `crontab -e`, `at`, or create ad-hoc scheduling scripts. Never use the CronCreate tool — it schedules at the Claude session level, not in miclaw's persistent cron system.
 
 Instead, edit **`./cron/jobs.json`** to add, modify, or remove scheduled tasks. The file contains a JSON array of job objects with this schema:
 
