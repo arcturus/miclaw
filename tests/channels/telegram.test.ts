@@ -38,6 +38,8 @@ vi.mock("node-telegram-bot-api", () => {
 
 import { TelegramChannel } from "../../src/channels/telegram.js";
 
+const MD_V2: { parse_mode: "MarkdownV2" } = { parse_mode: "MarkdownV2" };
+
 function makeConfig(overrides: Partial<MiclawConfig["channels"]["telegram"]> = {}): MiclawConfig {
   return {
     channels: {
@@ -125,7 +127,20 @@ describe("TelegramChannel message routing", () => {
       userId: "12345",
       message: "hello",
     });
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "hello back");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "hello back", MD_V2);
+    await channel.stop();
+  });
+
+  it("sends handler markdown as MarkdownV2", async () => {
+    const handler = vi.fn().mockResolvedValue({ result: "Use **bold** here", sessionId: "s", durationMs: 1 });
+    const channel = new TelegramChannel(makeConfig());
+    channel.onMessage(handler);
+    await channel.start();
+
+    await mockBot._emit("message", telegramMsg(12345, "hi"));
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "Use *bold* here", MD_V2);
     await channel.stop();
   });
 
@@ -225,7 +240,7 @@ describe("TelegramChannel send/broadcast", () => {
 
     const sent = await channel.send("12345", "Hello!");
     expect(sent).toBe(true);
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "Hello!");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "Hello\\!", MD_V2);
     await channel.stop();
   });
 
@@ -243,8 +258,8 @@ describe("TelegramChannel send/broadcast", () => {
     mockBot.sendMessage.mockClear();
     const sent = await channel.send("*", "Broadcast!");
     expect(sent).toBe(true);
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("111", "Broadcast!");
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("222", "Broadcast!");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("111", "Broadcast\\!", MD_V2);
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("222", "Broadcast\\!", MD_V2);
     await channel.stop();
   });
 
@@ -271,8 +286,8 @@ describe("TelegramChannel send/broadcast", () => {
 
     const sent = await channel.send("*", "Proactive!");
     expect(sent).toBe(true);
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("100", "Proactive!");
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("200", "Proactive!");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("100", "Proactive\\!", MD_V2);
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("200", "Proactive\\!", MD_V2);
     expect(mockBot.sendMessage).toHaveBeenCalledTimes(2);
     await channel.stop();
   });
@@ -293,7 +308,7 @@ describe("TelegramChannel long messages", () => {
     await vi.waitFor(() => expect(handler).toHaveBeenCalled());
 
     expect(mockBot.sendMessage).toHaveBeenCalledTimes(1);
-    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "short");
+    expect(mockBot.sendMessage).toHaveBeenCalledWith("12345", "short", MD_V2);
     await channel.stop();
   });
 
@@ -315,6 +330,8 @@ describe("TelegramChannel long messages", () => {
     expect(responseCalls.length).toBe(2);
     expect(responseCalls[0][1].length).toBe(4096);
     expect(responseCalls[1][1].length).toBe(904);
+    expect(responseCalls[0][2]).toEqual(MD_V2);
+    expect(responseCalls[1][2]).toEqual(MD_V2);
     await channel.stop();
   });
 });
