@@ -1,10 +1,7 @@
 // Layer 3: Telegram channel — long-polling bot via node-telegram-bot-api
 import TelegramBot from "node-telegram-bot-api";
-import telegramifyMarkdown from "telegramify-markdown";
 import type { Channel, MessageHandler } from "../types.js";
 import type { MiclawConfig } from "../config.js";
-
-const TELEGRAM_TEXT_MAX = 4096;
 
 export class TelegramChannel implements Channel {
   readonly name = "telegram";
@@ -107,21 +104,15 @@ export class TelegramChannel implements Channel {
     return sent;
   }
 
-  /** Assistant markdown → Telegram MarkdownV2 (remark adds a trailing newline; strip for short replies). */
-  private toMarkdownV2(markdown: string): string {
-    return telegramifyMarkdown(markdown, "escape").replace(/\n+$/, "");
-  }
-
-  private async sendLongMessage(chatId: string, markdown: string): Promise<void> {
-    const text = this.toMarkdownV2(markdown);
-    const opts: TelegramBot.SendMessageOptions = { parse_mode: "MarkdownV2" };
-    if (text.length <= TELEGRAM_TEXT_MAX) {
-      await this.bot!.sendMessage(chatId, text, opts);
+  private async sendLongMessage(chatId: string, text: string): Promise<void> {
+    const MAX_LENGTH = 4096;
+    if (text.length <= MAX_LENGTH) {
+      await this.bot!.sendMessage(chatId, text);
       return;
     }
-    for (let i = 0; i < text.length; i += TELEGRAM_TEXT_MAX) {
-      const chunk = text.slice(i, i + TELEGRAM_TEXT_MAX);
-      await this.bot!.sendMessage(chatId, chunk, opts);
+    for (let i = 0; i < text.length; i += MAX_LENGTH) {
+      const chunk = text.slice(i, i + MAX_LENGTH);
+      await this.bot!.sendMessage(chatId, chunk);
     }
   }
 }
