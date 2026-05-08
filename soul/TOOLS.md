@@ -26,7 +26,7 @@ Instead, edit **`./cron/jobs.json`** to add, modify, or remove scheduled tasks. 
   "message": "The prompt to send when the job fires",
   "enabled": true,
   "outputMode": "broadcast | journal | silent",
-  "broadcastTarget": { "channel": "web", "userId": "*" }
+  "broadcastTarget": { "channel": "*", "userId": "*" }
 }
 ```
 
@@ -37,7 +37,7 @@ Instead, edit **`./cron/jobs.json`** to add, modify, or remove scheduled tasks. 
 - `message` — The prompt text sent to the agent when the job triggers
 - `enabled` — Set to `false` to disable without deleting
 - `outputMode` — `"broadcast"` sends to a channel, `"journal"` writes to the journal, `"silent"` runs with no output
-- `broadcastTarget` — Required when `outputMode` is `"broadcast"`. Specifies `channel` and `userId`
+- `broadcastTarget` — Required when `outputMode` is `"broadcast"`. Specifies `channel` (web, telegram or * for all) and `userId`
 
 After editing `jobs.json`, reload the cron scheduler by calling the admin API:
 ```

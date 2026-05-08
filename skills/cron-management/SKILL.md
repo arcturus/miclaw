@@ -47,7 +47,7 @@ If the result is meant to be **read by a human**, use `"broadcast"`. If it's bac
 
 Required when `outputMode` is `"broadcast"`. Ignored otherwise.
 
-- `channel` — target channel name (e.g. `"web"`)
+- `channel` — target channel name (e.g. `"web"`, `"telegram"`, `"*"`)
 - `userId` — target user ID, or `"*"` to broadcast to all connected clients
 
 ## Template Variables
